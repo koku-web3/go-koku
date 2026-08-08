@@ -22,6 +22,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type KeyUsage int32
+
+const (
+	KeyUsage_KEY_USAGE_UNSPECIFIED KeyUsage = 0
+	KeyUsage_KEY_USAGE_OPERATIONAL KeyUsage = 1 // 运营用途
+	KeyUsage_KEY_USAGE_USER        KeyUsage = 2 // 用户用途
+)
+
+// Enum value maps for KeyUsage.
+var (
+	KeyUsage_name = map[int32]string{
+		0: "KEY_USAGE_UNSPECIFIED",
+		1: "KEY_USAGE_OPERATIONAL",
+		2: "KEY_USAGE_USER",
+	}
+	KeyUsage_value = map[string]int32{
+		"KEY_USAGE_UNSPECIFIED": 0,
+		"KEY_USAGE_OPERATIONAL": 1,
+		"KEY_USAGE_USER":        2,
+	}
+)
+
+func (x KeyUsage) Enum() *KeyUsage {
+	p := new(KeyUsage)
+	*p = x
+	return p
+}
+
+func (x KeyUsage) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (KeyUsage) Descriptor() protoreflect.EnumDescriptor {
+	return file_proto_coordinator_proto_enumTypes[0].Descriptor()
+}
+
+func (KeyUsage) Type() protoreflect.EnumType {
+	return &file_proto_coordinator_proto_enumTypes[0]
+}
+
+func (x KeyUsage) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use KeyUsage.Descriptor instead.
+func (KeyUsage) EnumDescriptor() ([]byte, []int) {
+	return file_proto_coordinator_proto_rawDescGZIP(), []int{0}
+}
+
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -104,10 +153,9 @@ func (x *HealthCheckResponse) GetStatus() string {
 
 type CreateMasterKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`      // 区块链网络名称（如 ethereum）
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`        // 密钥名称，不可重复
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`        // 密钥类型（如 ecdsa-p256、ed25519）
-	Derived       bool                   `protobuf:"varint,4,opt,name=derived,proto3" json:"derived,omitempty"` // 是否启用派生密钥，默认 false
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"` // 链路跟踪 ID
+	Chain         string                 `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`                    // 区块链网络名称（如 ethereum）
+	KeyType       string                 `protobuf:"bytes,3,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"` // 密钥类型（如 ecdsa-secp256k1）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +190,13 @@ func (*CreateMasterKeyRequest) Descriptor() ([]byte, []int) {
 	return file_proto_coordinator_proto_rawDescGZIP(), []int{2}
 }
 
+func (x *CreateMasterKeyRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
 func (x *CreateMasterKeyRequest) GetChain() string {
 	if x != nil {
 		return x.Chain
@@ -149,37 +204,22 @@ func (x *CreateMasterKeyRequest) GetChain() string {
 	return ""
 }
 
-func (x *CreateMasterKeyRequest) GetName() string {
+func (x *CreateMasterKeyRequest) GetKeyType() string {
 	if x != nil {
-		return x.Name
+		return x.KeyType
 	}
 	return ""
-}
-
-func (x *CreateMasterKeyRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *CreateMasterKeyRequest) GetDerived() bool {
-	if x != nil {
-		return x.Derived
-	}
-	return false
 }
 
 type CreateMasterKeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`                      // 操作结果描述
-	Chain         string                 `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`                          // 区块链网络名称
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                            // 密钥名称
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`                            // 密钥类型
-	Derived       bool                   `protobuf:"varint,5,opt,name=derived,proto3" json:"derived,omitempty"`                     // 是否启用派生密钥
-	PublicKey     string                 `protobuf:"bytes,6,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"` // 公钥（PEM 格式）
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TraceId        string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	KeyName        string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`                      // 主密钥名称，格式：{chain}-master-key
+	SeedCiphertext string                 `protobuf:"bytes,3,opt,name=seed_ciphertext,json=seedCiphertext,proto3" json:"seed_ciphertext,omitempty"` // Vault 加密的种子密文
+	PublicKey      string                 `protobuf:"bytes,4,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                // 公钥
+	Bip44Path      string                 `protobuf:"bytes,5,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                // BIP-44 路径
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateMasterKeyResponse) Reset() {
@@ -212,39 +252,25 @@ func (*CreateMasterKeyResponse) Descriptor() ([]byte, []int) {
 	return file_proto_coordinator_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *CreateMasterKeyResponse) GetMessage() string {
+func (x *CreateMasterKeyResponse) GetTraceId() string {
 	if x != nil {
-		return x.Message
+		return x.TraceId
 	}
 	return ""
 }
 
-func (x *CreateMasterKeyResponse) GetChain() string {
+func (x *CreateMasterKeyResponse) GetKeyName() string {
 	if x != nil {
-		return x.Chain
+		return x.KeyName
 	}
 	return ""
 }
 
-func (x *CreateMasterKeyResponse) GetName() string {
+func (x *CreateMasterKeyResponse) GetSeedCiphertext() string {
 	if x != nil {
-		return x.Name
+		return x.SeedCiphertext
 	}
 	return ""
-}
-
-func (x *CreateMasterKeyResponse) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *CreateMasterKeyResponse) GetDerived() bool {
-	if x != nil {
-		return x.Derived
-	}
-	return false
 }
 
 func (x *CreateMasterKeyResponse) GetPublicKey() string {
@@ -254,27 +280,40 @@ func (x *CreateMasterKeyResponse) GetPublicKey() string {
 	return ""
 }
 
-type ListKeysRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"` // 区块链网络名称
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+func (x *CreateMasterKeyResponse) GetBip44Path() string {
+	if x != nil {
+		return x.Bip44Path
+	}
+	return ""
 }
 
-func (x *ListKeysRequest) Reset() {
-	*x = ListKeysRequest{}
+type CreateDerivedKeyRequest struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	TraceId                string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Chain                  string                 `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`                                                                      // 区块链网络名称
+	MasterKeyName          string                 `protobuf:"bytes,3,opt,name=master_key_name,json=masterKeyName,proto3" json:"master_key_name,omitempty"`                               // 主密钥名称
+	MasterKeyPemCiphertext string                 `protobuf:"bytes,10,opt,name=master_key_pem_ciphertext,json=masterKeyPemCiphertext,proto3" json:"master_key_pem_ciphertext,omitempty"` // 主密钥PEM密文（来自CreateMasterKey返回值）
+	KeyUsage               KeyUsage               `protobuf:"varint,4,opt,name=key_usage,json=keyUsage,proto3,enum=coordinator.KeyUsage" json:"key_usage,omitempty"`                     // 密钥用途
+	KeyType                string                 `protobuf:"bytes,5,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`                                                   // 密钥类型
+	AddressIndex           uint32                 `protobuf:"varint,6,opt,name=address_index,json=addressIndex,proto3" json:"address_index,omitempty"`                                   // 地址索引
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *CreateDerivedKeyRequest) Reset() {
+	*x = CreateDerivedKeyRequest{}
 	mi := &file_proto_coordinator_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListKeysRequest) String() string {
+func (x *CreateDerivedKeyRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListKeysRequest) ProtoMessage() {}
+func (*CreateDerivedKeyRequest) ProtoMessage() {}
 
-func (x *ListKeysRequest) ProtoReflect() protoreflect.Message {
+func (x *CreateDerivedKeyRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_coordinator_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -286,39 +325,86 @@ func (x *ListKeysRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListKeysRequest.ProtoReflect.Descriptor instead.
-func (*ListKeysRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreateDerivedKeyRequest.ProtoReflect.Descriptor instead.
+func (*CreateDerivedKeyRequest) Descriptor() ([]byte, []int) {
 	return file_proto_coordinator_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ListKeysRequest) GetChain() string {
+func (x *CreateDerivedKeyRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *CreateDerivedKeyRequest) GetChain() string {
 	if x != nil {
 		return x.Chain
 	}
 	return ""
 }
 
-type ListKeysResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"` // 密钥名称列表
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+func (x *CreateDerivedKeyRequest) GetMasterKeyName() string {
+	if x != nil {
+		return x.MasterKeyName
+	}
+	return ""
 }
 
-func (x *ListKeysResponse) Reset() {
-	*x = ListKeysResponse{}
+func (x *CreateDerivedKeyRequest) GetMasterKeyPemCiphertext() string {
+	if x != nil {
+		return x.MasterKeyPemCiphertext
+	}
+	return ""
+}
+
+func (x *CreateDerivedKeyRequest) GetKeyUsage() KeyUsage {
+	if x != nil {
+		return x.KeyUsage
+	}
+	return KeyUsage_KEY_USAGE_UNSPECIFIED
+}
+
+func (x *CreateDerivedKeyRequest) GetKeyType() string {
+	if x != nil {
+		return x.KeyType
+	}
+	return ""
+}
+
+func (x *CreateDerivedKeyRequest) GetAddressIndex() uint32 {
+	if x != nil {
+		return x.AddressIndex
+	}
+	return 0
+}
+
+type CreateDerivedKeyResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	TraceId           string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	KeyName           string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`                                 // 派生密钥名称，格式：{chain}-child-{op|user}-{index}
+	PrivKeyCiphertext string                 `protobuf:"bytes,3,opt,name=priv_key_ciphertext,json=privKeyCiphertext,proto3" json:"priv_key_ciphertext,omitempty"` // Vault 加密的私钥密文
+	PublicKey         string                 `protobuf:"bytes,4,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`                           // 公钥
+	Bip44Path         string                 `protobuf:"bytes,5,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                           // BIP-44 路径
+	KeyContext        string                 `protobuf:"bytes,6,opt,name=key_context,json=keyContext,proto3" json:"key_context,omitempty"`                        // Vault context
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CreateDerivedKeyResponse) Reset() {
+	*x = CreateDerivedKeyResponse{}
 	mi := &file_proto_coordinator_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListKeysResponse) String() string {
+func (x *CreateDerivedKeyResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListKeysResponse) ProtoMessage() {}
+func (*CreateDerivedKeyResponse) ProtoMessage() {}
 
-func (x *ListKeysResponse) ProtoReflect() protoreflect.Message {
+func (x *CreateDerivedKeyResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_coordinator_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -330,174 +416,70 @@ func (x *ListKeysResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListKeysResponse.ProtoReflect.Descriptor instead.
-func (*ListKeysResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use CreateDerivedKeyResponse.ProtoReflect.Descriptor instead.
+func (*CreateDerivedKeyResponse) Descriptor() ([]byte, []int) {
 	return file_proto_coordinator_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ListKeysResponse) GetKeys() []string {
+func (x *CreateDerivedKeyResponse) GetTraceId() string {
 	if x != nil {
-		return x.Keys
-	}
-	return nil
-}
-
-type ReadKeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`                    // 区块链网络名称
-	KeyName       string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"` // 密钥名称
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReadKeyRequest) Reset() {
-	*x = ReadKeyRequest{}
-	mi := &file_proto_coordinator_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReadKeyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadKeyRequest) ProtoMessage() {}
-
-func (x *ReadKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadKeyRequest.ProtoReflect.Descriptor instead.
-func (*ReadKeyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *ReadKeyRequest) GetChain() string {
-	if x != nil {
-		return x.Chain
+		return x.TraceId
 	}
 	return ""
 }
 
-func (x *ReadKeyRequest) GetKeyName() string {
+func (x *CreateDerivedKeyResponse) GetKeyName() string {
 	if x != nil {
 		return x.KeyName
 	}
 	return ""
 }
 
-type ReadKeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	CreationTime  string                 `protobuf:"bytes,4,opt,name=creation_time,json=creationTime,proto3" json:"creation_time,omitempty"`
-	Keys          map[string]string      `protobuf:"bytes,5,rep,name=keys,proto3" json:"keys,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	MinVersion    int64                  `protobuf:"varint,6,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	LatestVersion int64                  `protobuf:"varint,7,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReadKeyResponse) Reset() {
-	*x = ReadKeyResponse{}
-	mi := &file_proto_coordinator_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReadKeyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadKeyResponse) ProtoMessage() {}
-
-func (x *ReadKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[7]
+func (x *CreateDerivedKeyResponse) GetPrivKeyCiphertext() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadKeyResponse.ProtoReflect.Descriptor instead.
-func (*ReadKeyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ReadKeyResponse) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
+		return x.PrivKeyCiphertext
 	}
 	return ""
 }
 
-func (x *ReadKeyResponse) GetVersion() int64 {
+func (x *CreateDerivedKeyResponse) GetPublicKey() string {
 	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
-func (x *ReadKeyResponse) GetName() string {
-	if x != nil {
-		return x.Name
+		return x.PublicKey
 	}
 	return ""
 }
 
-func (x *ReadKeyResponse) GetCreationTime() string {
+func (x *CreateDerivedKeyResponse) GetBip44Path() string {
 	if x != nil {
-		return x.CreationTime
+		return x.Bip44Path
 	}
 	return ""
 }
 
-func (x *ReadKeyResponse) GetKeys() map[string]string {
+func (x *CreateDerivedKeyResponse) GetKeyContext() string {
 	if x != nil {
-		return x.Keys
+		return x.KeyContext
 	}
-	return nil
-}
-
-func (x *ReadKeyResponse) GetMinVersion() int64 {
-	if x != nil {
-		return x.MinVersion
-	}
-	return 0
-}
-
-func (x *ReadKeyResponse) GetLatestVersion() int64 {
-	if x != nil {
-		return x.LatestVersion
-	}
-	return 0
+	return ""
 }
 
 type SignRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`                    // 区块链网络名称（如 eth）
-	KeyName       string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"` // 密钥名称
-	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`                      // 要签名的数据（hex 编码，支持 0x 前缀）
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	TraceId           string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Chain             string                 `protobuf:"bytes,2,opt,name=chain,proto3" json:"chain,omitempty"`                                                    // 区块链网络名称
+	KeyName           string                 `protobuf:"bytes,3,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`                                 // 派生密钥名称
+	KeyUsage          KeyUsage               `protobuf:"varint,4,opt,name=key_usage,json=keyUsage,proto3,enum=coordinator.KeyUsage" json:"key_usage,omitempty"`   // 密钥用途
+	KeyType           string                 `protobuf:"bytes,5,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`                                 // 密钥类型
+	KeyContext        string                 `protobuf:"bytes,6,opt,name=key_context,json=keyContext,proto3" json:"key_context,omitempty"`                        // Vault context
+	Message           string                 `protobuf:"bytes,7,opt,name=message,proto3" json:"message,omitempty"`                                                // 待签名数据
+	PrivKeyCiphertext string                 `protobuf:"bytes,8,opt,name=priv_key_ciphertext,json=privKeyCiphertext,proto3" json:"priv_key_ciphertext,omitempty"` // 私钥密文
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SignRequest) Reset() {
 	*x = SignRequest{}
-	mi := &file_proto_coordinator_proto_msgTypes[8]
+	mi := &file_proto_coordinator_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -509,7 +491,7 @@ func (x *SignRequest) String() string {
 func (*SignRequest) ProtoMessage() {}
 
 func (x *SignRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[8]
+	mi := &file_proto_coordinator_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -522,7 +504,14 @@ func (x *SignRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignRequest.ProtoReflect.Descriptor instead.
 func (*SignRequest) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{8}
+	return file_proto_coordinator_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SignRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
 }
 
 func (x *SignRequest) GetChain() string {
@@ -539,26 +528,52 @@ func (x *SignRequest) GetKeyName() string {
 	return ""
 }
 
-func (x *SignRequest) GetData() string {
+func (x *SignRequest) GetKeyUsage() KeyUsage {
 	if x != nil {
-		return x.Data
+		return x.KeyUsage
+	}
+	return KeyUsage_KEY_USAGE_UNSPECIFIED
+}
+
+func (x *SignRequest) GetKeyType() string {
+	if x != nil {
+		return x.KeyType
+	}
+	return ""
+}
+
+func (x *SignRequest) GetKeyContext() string {
+	if x != nil {
+		return x.KeyContext
+	}
+	return ""
+}
+
+func (x *SignRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *SignRequest) GetPrivKeyCiphertext() string {
+	if x != nil {
+		return x.PrivKeyCiphertext
 	}
 	return ""
 }
 
 type SignResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`                                   // 区块链网络名称
-	KeyName       string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`                // 密钥名称
-	Signature     string                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`                           // 签名结果（Vault 格式）
-	SignatureHex  string                 `protobuf:"bytes,4,opt,name=signature_hex,json=signatureHex,proto3" json:"signature_hex,omitempty"` // 签名结果（纯十六进制格式）
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Signature     string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"` // 签名结果（hex 格式）
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SignResponse) Reset() {
 	*x = SignResponse{}
-	mi := &file_proto_coordinator_proto_msgTypes[9]
+	mi := &file_proto_coordinator_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -570,7 +585,7 @@ func (x *SignResponse) String() string {
 func (*SignResponse) ProtoMessage() {}
 
 func (x *SignResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[9]
+	mi := &file_proto_coordinator_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -583,19 +598,12 @@ func (x *SignResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignResponse.ProtoReflect.Descriptor instead.
 func (*SignResponse) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{9}
+	return file_proto_coordinator_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *SignResponse) GetChain() string {
+func (x *SignResponse) GetTraceId() string {
 	if x != nil {
-		return x.Chain
-	}
-	return ""
-}
-
-func (x *SignResponse) GetKeyName() string {
-	if x != nil {
-		return x.KeyName
+		return x.TraceId
 	}
 	return ""
 }
@@ -607,193 +615,6 @@ func (x *SignResponse) GetSignature() string {
 	return ""
 }
 
-func (x *SignResponse) GetSignatureHex() string {
-	if x != nil {
-		return x.SignatureHex
-	}
-	return ""
-}
-
-type VerifyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`                    // 区块链网络名称（如 eth）
-	KeyName       string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"` // 密钥名称
-	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`                      // 原始数据（hex 编码）
-	Signature     string                 `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`            // 要验证的签名
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *VerifyRequest) Reset() {
-	*x = VerifyRequest{}
-	mi := &file_proto_coordinator_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VerifyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VerifyRequest) ProtoMessage() {}
-
-func (x *VerifyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VerifyRequest.ProtoReflect.Descriptor instead.
-func (*VerifyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *VerifyRequest) GetChain() string {
-	if x != nil {
-		return x.Chain
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetKeyName() string {
-	if x != nil {
-		return x.KeyName
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetData() string {
-	if x != nil {
-		return x.Data
-	}
-	return ""
-}
-
-func (x *VerifyRequest) GetSignature() string {
-	if x != nil {
-		return x.Signature
-	}
-	return ""
-}
-
-type VerifyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chain         string                 `protobuf:"bytes,1,opt,name=chain,proto3" json:"chain,omitempty"`                    // 区块链网络名称
-	KeyName       string                 `protobuf:"bytes,2,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"` // 密钥名称
-	Valid         bool                   `protobuf:"varint,3,opt,name=valid,proto3" json:"valid,omitempty"`                   // 签名是否有效
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *VerifyResponse) Reset() {
-	*x = VerifyResponse{}
-	mi := &file_proto_coordinator_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VerifyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VerifyResponse) ProtoMessage() {}
-
-func (x *VerifyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VerifyResponse.ProtoReflect.Descriptor instead.
-func (*VerifyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *VerifyResponse) GetChain() string {
-	if x != nil {
-		return x.Chain
-	}
-	return ""
-}
-
-func (x *VerifyResponse) GetKeyName() string {
-	if x != nil {
-		return x.KeyName
-	}
-	return ""
-}
-
-func (x *VerifyResponse) GetValid() bool {
-	if x != nil {
-		return x.Valid
-	}
-	return false
-}
-
-type ErrorResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Error         string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"` // 错误信息
-	Code          int32                  `protobuf:"varint,2,opt,name=code,proto3" json:"code,omitempty"`  // 错误码
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ErrorResponse) Reset() {
-	*x = ErrorResponse{}
-	mi := &file_proto_coordinator_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ErrorResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ErrorResponse) ProtoMessage() {}
-
-func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_coordinator_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
-func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_proto_coordinator_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ErrorResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-func (x *ErrorResponse) GetCode() int32 {
-	if x != nil {
-		return x.Code
-	}
-	return 0
-}
-
 var File_proto_coordinator_proto protoreflect.FileDescriptor
 
 const file_proto_coordinator_proto_rawDesc = "" +
@@ -801,68 +622,58 @@ const file_proto_coordinator_proto_rawDesc = "" +
 	"\x17proto/coordinator.proto\x12\vcoordinator\"\x14\n" +
 	"\x12HealthCheckRequest\"-\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"p\n" +
-	"\x16CreateMasterKeyRequest\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
-	"\aderived\x18\x04 \x01(\bR\aderived\"\xaa\x01\n" +
-	"\x17CreateMasterKeyResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12\x14\n" +
-	"\x05chain\x18\x02 \x01(\tR\x05chain\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
-	"\x04type\x18\x04 \x01(\tR\x04type\x12\x18\n" +
-	"\aderived\x18\x05 \x01(\bR\aderived\x12\x1d\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"d\n" +
+	"\x16CreateMasterKeyRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x14\n" +
+	"\x05chain\x18\x02 \x01(\tR\x05chain\x12\x19\n" +
+	"\bkey_type\x18\x03 \x01(\tR\akeyType\"\xb6\x01\n" +
+	"\x17CreateMasterKeyResponse\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x19\n" +
+	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12'\n" +
+	"\x0fseed_ciphertext\x18\x03 \x01(\tR\x0eseedCiphertext\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x06 \x01(\tR\tpublicKey\"'\n" +
-	"\x0fListKeysRequest\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\"&\n" +
-	"\x10ListKeysResponse\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\"A\n" +
-	"\x0eReadKeyRequest\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x19\n" +
-	"\bkey_name\x18\x02 \x01(\tR\akeyName\"\xc0\x02\n" +
-	"\x0fReadKeyResponse\x12\x1d\n" +
+	"public_key\x18\x04 \x01(\tR\tpublicKey\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12#\n" +
-	"\rcreation_time\x18\x04 \x01(\tR\fcreationTime\x12:\n" +
-	"\x04keys\x18\x05 \x03(\v2&.coordinator.ReadKeyResponse.KeysEntryR\x04keys\x12\x1f\n" +
-	"\vmin_version\x18\x06 \x01(\x03R\n" +
-	"minVersion\x12%\n" +
-	"\x0elatest_version\x18\a \x01(\x03R\rlatestVersion\x1a7\n" +
-	"\tKeysEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"R\n" +
-	"\vSignRequest\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x19\n" +
-	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\tR\x04data\"\x82\x01\n" +
-	"\fSignResponse\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x19\n" +
-	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12\x1c\n" +
-	"\tsignature\x18\x03 \x01(\tR\tsignature\x12#\n" +
-	"\rsignature_hex\x18\x04 \x01(\tR\fsignatureHex\"r\n" +
-	"\rVerifyRequest\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x19\n" +
-	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\tR\x04data\x12\x1c\n" +
-	"\tsignature\x18\x04 \x01(\tR\tsignature\"W\n" +
-	"\x0eVerifyResponse\x12\x14\n" +
-	"\x05chain\x18\x01 \x01(\tR\x05chain\x12\x19\n" +
-	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12\x14\n" +
-	"\x05valid\x18\x03 \x01(\bR\x05valid\"9\n" +
-	"\rErrorResponse\x12\x14\n" +
-	"\x05error\x18\x01 \x01(\tR\x05error\x12\x12\n" +
-	"\x04code\x18\x02 \x01(\x05R\x04code2\xcd\x03\n" +
+	"bip44_path\x18\x05 \x01(\tR\tbip44Path\"\xe6\x01\n" +
+	"\x17CreateDerivedKeyRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x14\n" +
+	"\x05chain\x18\x02 \x01(\tR\x05chain\x12&\n" +
+	"\x0fmaster_key_name\x18\x03 \x01(\tR\rmasterKeyName\x122\n" +
+	"\tkey_usage\x18\x04 \x01(\x0e2\x15.coordinator.KeyUsageR\bkeyUsage\x12\x19\n" +
+	"\bkey_type\x18\x05 \x01(\tR\akeyType\x12#\n" +
+	"\raddress_index\x18\x06 \x01(\rR\faddressIndex\"\xdf\x01\n" +
+	"\x18CreateDerivedKeyResponse\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x19\n" +
+	"\bkey_name\x18\x02 \x01(\tR\akeyName\x12.\n" +
+	"\x13priv_key_ciphertext\x18\x03 \x01(\tR\x11privKeyCiphertext\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x04 \x01(\tR\tpublicKey\x12\x1d\n" +
+	"\n" +
+	"bip44_path\x18\x05 \x01(\tR\tbip44Path\x12\x1f\n" +
+	"\vkey_context\x18\x06 \x01(\tR\n" +
+	"keyContext\"\x93\x02\n" +
+	"\vSignRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x14\n" +
+	"\x05chain\x18\x02 \x01(\tR\x05chain\x12\x19\n" +
+	"\bkey_name\x18\x03 \x01(\tR\akeyName\x122\n" +
+	"\tkey_usage\x18\x04 \x01(\x0e2\x15.coordinator.KeyUsageR\bkeyUsage\x12\x19\n" +
+	"\bkey_type\x18\x05 \x01(\tR\akeyType\x12\x1f\n" +
+	"\vkey_context\x18\x06 \x01(\tR\n" +
+	"keyContext\x12\x18\n" +
+	"\amessage\x18\a \x01(\tR\amessage\x12.\n" +
+	"\x13priv_key_ciphertext\x18\b \x01(\tR\x11privKeyCiphertext\"G\n" +
+	"\fSignResponse\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1c\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature*T\n" +
+	"\bKeyUsage\x12\x19\n" +
+	"\x15KEY_USAGE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15KEY_USAGE_OPERATIONAL\x10\x01\x12\x12\n" +
+	"\x0eKEY_USAGE_USER\x10\x022\xdc\x02\n" +
 	"\fChainService\x12P\n" +
 	"\vHealthCheck\x12\x1f.coordinator.HealthCheckRequest\x1a .coordinator.HealthCheckResponse\x12\\\n" +
-	"\x0fCreateMasterKey\x12#.coordinator.CreateMasterKeyRequest\x1a$.coordinator.CreateMasterKeyResponse\x12G\n" +
-	"\bListKeys\x12\x1c.coordinator.ListKeysRequest\x1a\x1d.coordinator.ListKeysResponse\x12D\n" +
-	"\aReadKey\x12\x1b.coordinator.ReadKeyRequest\x1a\x1c.coordinator.ReadKeyResponse\x12;\n" +
-	"\x04Sign\x12\x18.coordinator.SignRequest\x1a\x19.coordinator.SignResponse\x12A\n" +
-	"\x06Verify\x12\x1a.coordinator.VerifyRequest\x1a\x1b.coordinator.VerifyResponseB=Z;github.com/koku-web3/go-koku/internal/coordinator/grpc;grpcb\x06proto3"
+	"\x0fCreateMasterKey\x12#.coordinator.CreateMasterKeyRequest\x1a$.coordinator.CreateMasterKeyResponse\x12_\n" +
+	"\x10CreateDerivedKey\x12$.coordinator.CreateDerivedKeyRequest\x1a%.coordinator.CreateDerivedKeyResponse\x12;\n" +
+	"\x04Sign\x12\x18.coordinator.SignRequest\x1a\x19.coordinator.SignResponseB=Z;github.com/koku-web3/go-koku/internal/coordinator/grpc;grpcb\x06proto3"
 
 var (
 	file_proto_coordinator_proto_rawDescOnce sync.Once
@@ -876,42 +687,35 @@ func file_proto_coordinator_proto_rawDescGZIP() []byte {
 	return file_proto_coordinator_proto_rawDescData
 }
 
-var file_proto_coordinator_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_proto_coordinator_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proto_coordinator_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_coordinator_proto_goTypes = []any{
-	(*HealthCheckRequest)(nil),      // 0: coordinator.HealthCheckRequest
-	(*HealthCheckResponse)(nil),     // 1: coordinator.HealthCheckResponse
-	(*CreateMasterKeyRequest)(nil),  // 2: coordinator.CreateMasterKeyRequest
-	(*CreateMasterKeyResponse)(nil), // 3: coordinator.CreateMasterKeyResponse
-	(*ListKeysRequest)(nil),         // 4: coordinator.ListKeysRequest
-	(*ListKeysResponse)(nil),        // 5: coordinator.ListKeysResponse
-	(*ReadKeyRequest)(nil),          // 6: coordinator.ReadKeyRequest
-	(*ReadKeyResponse)(nil),         // 7: coordinator.ReadKeyResponse
-	(*SignRequest)(nil),             // 8: coordinator.SignRequest
-	(*SignResponse)(nil),            // 9: coordinator.SignResponse
-	(*VerifyRequest)(nil),           // 10: coordinator.VerifyRequest
-	(*VerifyResponse)(nil),          // 11: coordinator.VerifyResponse
-	(*ErrorResponse)(nil),           // 12: coordinator.ErrorResponse
-	nil,                             // 13: coordinator.ReadKeyResponse.KeysEntry
+	(KeyUsage)(0),                    // 0: coordinator.KeyUsage
+	(*HealthCheckRequest)(nil),       // 1: coordinator.HealthCheckRequest
+	(*HealthCheckResponse)(nil),      // 2: coordinator.HealthCheckResponse
+	(*CreateMasterKeyRequest)(nil),   // 3: coordinator.CreateMasterKeyRequest
+	(*CreateMasterKeyResponse)(nil),  // 4: coordinator.CreateMasterKeyResponse
+	(*CreateDerivedKeyRequest)(nil),  // 5: coordinator.CreateDerivedKeyRequest
+	(*CreateDerivedKeyResponse)(nil), // 6: coordinator.CreateDerivedKeyResponse
+	(*SignRequest)(nil),              // 7: coordinator.SignRequest
+	(*SignResponse)(nil),             // 8: coordinator.SignResponse
 }
 var file_proto_coordinator_proto_depIdxs = []int32{
-	13, // 0: coordinator.ReadKeyResponse.keys:type_name -> coordinator.ReadKeyResponse.KeysEntry
-	0,  // 1: coordinator.ChainService.HealthCheck:input_type -> coordinator.HealthCheckRequest
-	2,  // 2: coordinator.ChainService.CreateMasterKey:input_type -> coordinator.CreateMasterKeyRequest
-	4,  // 3: coordinator.ChainService.ListKeys:input_type -> coordinator.ListKeysRequest
-	6,  // 4: coordinator.ChainService.ReadKey:input_type -> coordinator.ReadKeyRequest
-	8,  // 5: coordinator.ChainService.Sign:input_type -> coordinator.SignRequest
-	10, // 6: coordinator.ChainService.Verify:input_type -> coordinator.VerifyRequest
-	1,  // 7: coordinator.ChainService.HealthCheck:output_type -> coordinator.HealthCheckResponse
-	3,  // 8: coordinator.ChainService.CreateMasterKey:output_type -> coordinator.CreateMasterKeyResponse
-	5,  // 9: coordinator.ChainService.ListKeys:output_type -> coordinator.ListKeysResponse
-	7,  // 10: coordinator.ChainService.ReadKey:output_type -> coordinator.ReadKeyResponse
-	9,  // 11: coordinator.ChainService.Sign:output_type -> coordinator.SignResponse
-	11, // 12: coordinator.ChainService.Verify:output_type -> coordinator.VerifyResponse
-	7,  // [7:13] is the sub-list for method output_type
-	1,  // [1:7] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	0, // 0: coordinator.CreateDerivedKeyRequest.key_usage:type_name -> coordinator.KeyUsage
+	0, // 1: coordinator.SignRequest.key_usage:type_name -> coordinator.KeyUsage
+	1, // 2: coordinator.ChainService.HealthCheck:input_type -> coordinator.HealthCheckRequest
+	3, // 3: coordinator.ChainService.CreateMasterKey:input_type -> coordinator.CreateMasterKeyRequest
+	5, // 4: coordinator.ChainService.CreateDerivedKey:input_type -> coordinator.CreateDerivedKeyRequest
+	7, // 5: coordinator.ChainService.Sign:input_type -> coordinator.SignRequest
+	2, // 6: coordinator.ChainService.HealthCheck:output_type -> coordinator.HealthCheckResponse
+	4, // 7: coordinator.ChainService.CreateMasterKey:output_type -> coordinator.CreateMasterKeyResponse
+	6, // 8: coordinator.ChainService.CreateDerivedKey:output_type -> coordinator.CreateDerivedKeyResponse
+	8, // 9: coordinator.ChainService.Sign:output_type -> coordinator.SignResponse
+	6, // [6:10] is the sub-list for method output_type
+	2, // [2:6] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proto_coordinator_proto_init() }
@@ -924,13 +728,14 @@ func file_proto_coordinator_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_coordinator_proto_rawDesc), len(file_proto_coordinator_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   14,
+			NumEnums:      1,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_proto_coordinator_proto_goTypes,
 		DependencyIndexes: file_proto_coordinator_proto_depIdxs,
+		EnumInfos:         file_proto_coordinator_proto_enumTypes,
 		MessageInfos:      file_proto_coordinator_proto_msgTypes,
 	}.Build()
 	File_proto_coordinator_proto = out.File

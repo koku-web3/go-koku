@@ -70,8 +70,17 @@ func (a *SM2Algorithm) ClearPrivateKey(privateKey crypto.PrivateKey) {
 	// }
 }
 
+// NewPrivateKeyFromBytes 从原始私钥字节创建 SM2 私钥对象
+// 用于 BIP-32/BIP-44 派生子密钥的场景
+func (a *SM2Algorithm) NewPrivateKeyFromBytes(privKeyBytes []byte) (crypto.PrivateKey, error) {
+	// TODO: 实现 SM2 私钥创建
+	// import "github.com/tjfoc/gmsm/sm2"
+	// return sm2.NewPrivateKey(privKeyBytes)
+	return nil, fmt.Errorf("SM2 algorithm not implemented: requires github.com/tjfoc/gmsm")
+}
+
 // HashFunc 返回签名使用的哈希函数
-// SM2 使用 SM3 哈希算法，Go 标准库没有实现
+// SM2 使用 SM3 哈希算法
 func (a *SM2Algorithm) HashFunc() crypto.Hash {
 	// SM3 的 crypto.Hash 值（如果有定义的话）
 	// 目前 Go 标准库未定义 SM3，可使用第三方库

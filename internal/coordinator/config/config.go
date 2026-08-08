@@ -8,19 +8,12 @@ import (
 )
 
 type Config struct {
-	Vault VaultConfig `toml:"vault"`
-	AWS   AWSConfig   `toml:"aws"`
-	App   AppConfig   `toml:"app"`
-	Log   LogConfig   `toml:"log"`
-	GRPC  GRPCConfig  `toml:"grpc"`
-	Path  string
-}
-
-type VaultConfig struct {
-	Address              string `toml:"address"`
-	MountPath            string `toml:"mount_path"`
-	RoleName             string `toml:"role_name"`
-	TokenRefreshInterval int    `toml:"token_refresh_interval"`
+	AWS    AWSConfig    `toml:"aws"`
+	Log    LogConfig    `toml:"log"`
+	GRPC   GRPCConfig   `toml:"grpc"`
+	Signer SignerConfig `toml:"signer"`
+	DB     DBConfig     `toml:"db"`
+	Path   string
 }
 
 type AWSConfig struct {
@@ -30,16 +23,9 @@ type AWSConfig struct {
 	RoleARN       string `toml:"role_arn"`
 }
 
-type AppConfig struct {
-	Host              string `toml:"host"`
-	Port              int    `toml:"port"`
-	ReadHeaderTimeout int    `toml:"read_header_timeout"` // 超时时间，单位：秒
-}
-
 type GRPCConfig struct {
-	Enable bool   `toml:"enable"`
-	Host   string `toml:"host"`
-	Port   int    `toml:"port"`
+	Host string `toml:"host"`
+	Port int    `toml:"port"`
 }
 
 type LogConfig struct {
@@ -52,6 +38,22 @@ type LogConfig struct {
 	Format     string `toml:"format"`
 	Verbosity  int    `toml:"verbosity"`
 	Vmodule    string `toml:"vmodule"`
+}
+
+// SignerConfig Signer 服务配置
+type SignerConfig struct {
+	Address string `toml:"address"` // Signer gRPC 服务地址，如 "localhost:50051"
+}
+
+// DBConfig 数据库配置
+type DBConfig struct {
+	Host         string `toml:"host"`
+	Port         int    `toml:"port"`
+	User         string `toml:"user"`
+	Password     string `toml:"password"`
+	Database     string `toml:"database"`
+	MaxOpenConns int    `toml:"max_open_conns"`
+	MaxIdleConns int    `toml:"max_idle_conns"`
 }
 
 var cfg *Config

@@ -17,17 +17,26 @@ message CreateMasterKeyResponse {
     string seed = 2;            // 主密钥种子（base64），用于备份
 }
 
+// 密钥用途
+enum KeyUsage {
+    KEY_USAGE_UNSPECIFIED = 0;
+    KEY_USAGE_OPERATIONAL = 1; // 运营用途，内部操作
+    KEY_USAGE_USER = 2;        // 用户用途，出入金
+}
+
 // 创建密钥请求
 message CreateKeyRequest {
     string trace_id = 1;       // 链路跟踪ID，必填
     string chain_code = 2;      // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
     string master_key_name = 3; // 主密钥名称，1-36必填，唯一
+    string master_key_pem_ciphertext = 10; // 主密钥PEM密文（base64），CreateMasterKey返回的seed，必填
     string key_context = 4;     // 密钥派生上下文标识符，1-36必填，唯一
-    string key_type = 5;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+    KeyUsage key_usage = 5;     // 密钥用途：运营或用户
+    string key_type = 6;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
     // BIP-44 派生路径参数
-    uint32 account = 6;         // 账户索引，默认 0
-    uint32 change = 7;          // 0=外部链，1=内部链，默认 0
-    uint32 address_index = 8;   // 地址索引，默认 0
+    uint32 account = 7;         // 账户索引，默认 0
+    uint32 change = 8;          // 0=外部链，1=内部链，默认 0
+    uint32 address_index = 9;   // 地址索引，默认 0
 }
 
 // 创建密钥响应
@@ -41,10 +50,12 @@ message SignRequest {
     string trace_id = 1;            // 链路跟踪ID，必填
     string chain_code = 2;          // 区块链名称，1-36必填
     string master_key_name = 3;     // 主密钥名称，1-36必填
-    string key_context = 4;         // 密钥派生上下文标识符，1-36必填
-    string key_type = 5;           // 密钥类型，1-36必填
-    string message = 6;            // 待签名数据，1-1024必填
-    string priv_key_ciphertext = 7; // 私钥密文，1-1024必填
+    string key_name = 4;            // 派生密钥名称，格式：{chain}-child-{op|user}-{index}
+    KeyUsage key_usage = 5;         // 密钥用途
+    string key_context = 6;         // 密钥派生上下文，用于解密
+    string key_type = 7;           // 密钥类型，1-36必填
+    string message = 8;            // 待签名数据，1-1024必填
+    string priv_key_ciphertext = 9; // 私钥密文，1-1024必填
 }
 
 // 签名响应

@@ -45,6 +45,16 @@ func (a *Ed25519Algorithm) GenerateKey() (crypto.PrivateKey, crypto.PublicKey, e
 	return priv, pub, nil
 }
 
+// NewPrivateKeyFromBytes 从原始私钥字节创建 Ed25519 私钥对象
+// 用于 BIP-32/BIP-44 派生子密钥的场景
+// Ed25519 的私钥直接就是 32 字节种子
+func (a *Ed25519Algorithm) NewPrivateKeyFromBytes(privKeyBytes []byte) (crypto.PrivateKey, error) {
+	if len(privKeyBytes) != 32 {
+		return nil, fmt.Errorf("invalid private key length: expected 32, got %d", len(privKeyBytes))
+	}
+	return ed25519.PrivateKey(privKeyBytes), nil
+}
+
 // Sign 对消息进行 Ed25519 签名
 func (a *Ed25519Algorithm) Sign(privateKey crypto.PrivateKey, message []byte) ([]byte, error) {
 	signer, ok := privateKey.(crypto.Signer)

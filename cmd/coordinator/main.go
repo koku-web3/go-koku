@@ -8,10 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/koku-web3/go-koku/internal/coordinator/chain"
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
 	"github.com/koku-web3/go-koku/internal/coordinator/grpc"
-	"github.com/koku-web3/go-koku/internal/coordinator/server"
+	signerclient "github.com/koku-web3/go-koku/internal/coordinator/signer"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 )
 
@@ -30,9 +29,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	chainServ, err := chain.NewChainService(cfg)
+	// 创建 Signer 客户端
+	client, err := signerclient.NewClient(cfg.Signer.Address)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create Coordinator: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to create Signer client: %v", err)
 		os.Exit(1)
 	}
 
@@ -46,17 +46,9 @@ func main() {
 		cancel()
 	}()
 
-	chainServ.StartTokenRefresh(ctx)
-
-	if cfg.GRPC.Enable {
-		grpcSrv := grpc.NewServer(chainServ, &cfg.GRPC)
-		if err := grpcSrv.Start(ctx); err != nil {
-			log.Error("gRPC server error", "error", err)
-		}
-	} else {
-		srv := server.NewServer(chainServ, cfg.App.Host, cfg.App.Port, cfg.App.ReadHeaderTimeout)
-		if err := srv.Start(ctx); err != nil {
-			log.Error("HTTP server error", "error", err)
-		}
+	// 启动 gRPC 服务
+	server := grpc.NewServer(client, &cfg.GRPC)
+	if err := server.Start(ctx); err != nil {
+		log.Error("gRPC server error", "error", err)
 	}
 }

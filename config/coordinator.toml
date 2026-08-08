@@ -1,24 +1,19 @@
-[vault]
-address = "http://127.0.0.1:8200"        # Vault服务器地址
-mount_path = "aws"                       # AWS IAM认证挂载路径
-role_name = "ethereum-client"            # Vault Role名称
-token_refresh_interval = 3500            # Token刷新间隔（秒），必须小于Vault Role的token_ttl，建议设置为token_ttl的80%左右
-
-[aws]
-iam_user_enable = true                                             # true: 使用 access_key/secret_key (本地测试), false: 使用 EC2 Instance Profile (生产部署)
-access_key = "AKIAU2CJR6GVDDDTGTNR"                                # AWS IAM 用户访问密钥 (仅 iam_user_enable=true 时使用)
-secret_key = "ezCHrRiZMuzZ2uWMJYM4iyVdi04ErAOnJAlHjmDp"            # AWS IAM 用户密钥 (仅 iam_user_enable=true 时使用)
-role_arn = "arn:aws:iam::330866749866:role/vault@create-key-role"  # Vault Role 绑定的 AWS IAM Role ARN
-
-[app]
-host = "127.0.0.1"
-port = 8080
-read_header_timeout = 5  # HTTP Header 读取超时时间（秒），用于防止 Slowloris 攻击
-
 [grpc]
 enable = false   # true: 启用gRPC, false: 启用http
 host = "127.0.0.1"
 port = 50051
+
+[signer]
+address = "127.0.0.1:50052"
+
+[db]
+host = ""
+port= 3306
+user= ""
+password= ""
+database= ""
+max_open_conns= 1000
+max_idle_conns= 1000
 
 [log]
 rotation = true

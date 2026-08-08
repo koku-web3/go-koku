@@ -19,12 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChainService_HealthCheck_FullMethodName     = "/coordinator.ChainService/HealthCheck"
-	ChainService_CreateMasterKey_FullMethodName = "/coordinator.ChainService/CreateMasterKey"
-	ChainService_ListKeys_FullMethodName        = "/coordinator.ChainService/ListKeys"
-	ChainService_ReadKey_FullMethodName         = "/coordinator.ChainService/ReadKey"
-	ChainService_Sign_FullMethodName            = "/coordinator.ChainService/Sign"
-	ChainService_Verify_FullMethodName          = "/coordinator.ChainService/Verify"
+	ChainService_HealthCheck_FullMethodName      = "/coordinator.ChainService/HealthCheck"
+	ChainService_CreateMasterKey_FullMethodName  = "/coordinator.ChainService/CreateMasterKey"
+	ChainService_CreateDerivedKey_FullMethodName = "/coordinator.ChainService/CreateDerivedKey"
+	ChainService_Sign_FullMethodName             = "/coordinator.ChainService/Sign"
 )
 
 // ChainServiceClient is the client API for ChainService service.
@@ -32,20 +30,19 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // ChainService gRPC 密钥管理服务
-// 提供密钥创建、查询、签名和验证等操作
+// 作为转发层，将请求转发给 Signer 服务
+// 私钥明文仅存在于 Signer 服务内存中
 type ChainServiceClient interface {
 	// 健康检查
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 	// 创建主密钥
+	// 转发给 Signer 服务创建 HD 主密钥
 	CreateMasterKey(ctx context.Context, in *CreateMasterKeyRequest, opts ...grpc.CallOption) (*CreateMasterKeyResponse, error)
-	// 获取密钥列表
-	ListKeys(ctx context.Context, in *ListKeysRequest, opts ...grpc.CallOption) (*ListKeysResponse, error)
-	// 获取密钥详情
-	ReadKey(ctx context.Context, in *ReadKeyRequest, opts ...grpc.CallOption) (*ReadKeyResponse, error)
+	// 创建派生密钥（运营/用户密钥）
+	CreateDerivedKey(ctx context.Context, in *CreateDerivedKeyRequest, opts ...grpc.CallOption) (*CreateDerivedKeyResponse, error)
 	// 签名消息
+	// 转发给 Signer 服务执行签名
 	Sign(ctx context.Context, in *SignRequest, opts ...grpc.CallOption) (*SignResponse, error)
-	// 验证签名
-	Verify(ctx context.Context, in *VerifyRequest, opts ...grpc.CallOption) (*VerifyResponse, error)
 }
 
 type chainServiceClient struct {
@@ -76,20 +73,10 @@ func (c *chainServiceClient) CreateMasterKey(ctx context.Context, in *CreateMast
 	return out, nil
 }
 
-func (c *chainServiceClient) ListKeys(ctx context.Context, in *ListKeysRequest, opts ...grpc.CallOption) (*ListKeysResponse, error) {
+func (c *chainServiceClient) CreateDerivedKey(ctx context.Context, in *CreateDerivedKeyRequest, opts ...grpc.CallOption) (*CreateDerivedKeyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListKeysResponse)
-	err := c.cc.Invoke(ctx, ChainService_ListKeys_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *chainServiceClient) ReadKey(ctx context.Context, in *ReadKeyRequest, opts ...grpc.CallOption) (*ReadKeyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReadKeyResponse)
-	err := c.cc.Invoke(ctx, ChainService_ReadKey_FullMethodName, in, out, cOpts...)
+	out := new(CreateDerivedKeyResponse)
+	err := c.cc.Invoke(ctx, ChainService_CreateDerivedKey_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,35 +93,24 @@ func (c *chainServiceClient) Sign(ctx context.Context, in *SignRequest, opts ...
 	return out, nil
 }
 
-func (c *chainServiceClient) Verify(ctx context.Context, in *VerifyRequest, opts ...grpc.CallOption) (*VerifyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VerifyResponse)
-	err := c.cc.Invoke(ctx, ChainService_Verify_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ChainServiceServer is the server API for ChainService service.
 // All implementations must embed UnimplementedChainServiceServer
 // for forward compatibility.
 //
 // ChainService gRPC 密钥管理服务
-// 提供密钥创建、查询、签名和验证等操作
+// 作为转发层，将请求转发给 Signer 服务
+// 私钥明文仅存在于 Signer 服务内存中
 type ChainServiceServer interface {
 	// 健康检查
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
 	// 创建主密钥
+	// 转发给 Signer 服务创建 HD 主密钥
 	CreateMasterKey(context.Context, *CreateMasterKeyRequest) (*CreateMasterKeyResponse, error)
-	// 获取密钥列表
-	ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error)
-	// 获取密钥详情
-	ReadKey(context.Context, *ReadKeyRequest) (*ReadKeyResponse, error)
+	// 创建派生密钥（运营/用户密钥）
+	CreateDerivedKey(context.Context, *CreateDerivedKeyRequest) (*CreateDerivedKeyResponse, error)
 	// 签名消息
+	// 转发给 Signer 服务执行签名
 	Sign(context.Context, *SignRequest) (*SignResponse, error)
-	// 验证签名
-	Verify(context.Context, *VerifyRequest) (*VerifyResponse, error)
 	mustEmbedUnimplementedChainServiceServer()
 }
 
@@ -151,17 +127,11 @@ func (UnimplementedChainServiceServer) HealthCheck(context.Context, *HealthCheck
 func (UnimplementedChainServiceServer) CreateMasterKey(context.Context, *CreateMasterKeyRequest) (*CreateMasterKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateMasterKey not implemented")
 }
-func (UnimplementedChainServiceServer) ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListKeys not implemented")
-}
-func (UnimplementedChainServiceServer) ReadKey(context.Context, *ReadKeyRequest) (*ReadKeyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReadKey not implemented")
+func (UnimplementedChainServiceServer) CreateDerivedKey(context.Context, *CreateDerivedKeyRequest) (*CreateDerivedKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateDerivedKey not implemented")
 }
 func (UnimplementedChainServiceServer) Sign(context.Context, *SignRequest) (*SignResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Sign not implemented")
-}
-func (UnimplementedChainServiceServer) Verify(context.Context, *VerifyRequest) (*VerifyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Verify not implemented")
 }
 func (UnimplementedChainServiceServer) mustEmbedUnimplementedChainServiceServer() {}
 func (UnimplementedChainServiceServer) testEmbeddedByValue()                      {}
@@ -220,38 +190,20 @@ func _ChainService_CreateMasterKey_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ChainService_ListKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListKeysRequest)
+func _ChainService_CreateDerivedKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateDerivedKeyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ChainServiceServer).ListKeys(ctx, in)
+		return srv.(ChainServiceServer).CreateDerivedKey(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ChainService_ListKeys_FullMethodName,
+		FullMethod: ChainService_CreateDerivedKey_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChainServiceServer).ListKeys(ctx, req.(*ListKeysRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ChainService_ReadKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ChainServiceServer).ReadKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ChainService_ReadKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChainServiceServer).ReadKey(ctx, req.(*ReadKeyRequest))
+		return srv.(ChainServiceServer).CreateDerivedKey(ctx, req.(*CreateDerivedKeyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -274,24 +226,6 @@ func _ChainService_Sign_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ChainService_Verify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VerifyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ChainServiceServer).Verify(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ChainService_Verify_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChainServiceServer).Verify(ctx, req.(*VerifyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ChainService_ServiceDesc is the grpc.ServiceDesc for ChainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -308,20 +242,12 @@ var ChainService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChainService_CreateMasterKey_Handler,
 		},
 		{
-			MethodName: "ListKeys",
-			Handler:    _ChainService_ListKeys_Handler,
-		},
-		{
-			MethodName: "ReadKey",
-			Handler:    _ChainService_ReadKey_Handler,
+			MethodName: "CreateDerivedKey",
+			Handler:    _ChainService_CreateDerivedKey_Handler,
 		},
 		{
 			MethodName: "Sign",
 			Handler:    _ChainService_Sign_Handler,
-		},
-		{
-			MethodName: "Verify",
-			Handler:    _ChainService_Verify_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

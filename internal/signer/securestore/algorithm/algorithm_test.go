@@ -16,6 +16,10 @@ func (m *mockAlgorithm) GenerateKey() (crypto.PrivateKey, crypto.PublicKey, erro
 	return nil, nil, nil
 }
 
+func (m *mockAlgorithm) NewPrivateKeyFromBytes(privKeyBytes []byte) (crypto.PrivateKey, error) {
+	return nil, nil
+}
+
 func (m *mockAlgorithm) Sign(_ crypto.PrivateKey, _ []byte) ([]byte, error) {
 	return nil, nil
 }

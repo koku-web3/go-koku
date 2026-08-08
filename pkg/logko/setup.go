@@ -112,7 +112,7 @@ func setupWithConfig(cfg *Config) error {
 	} else if logFile != "" {
 		// 如果关闭了轮转，但设置了日志文件，仅追加写该文件和终端
 		var err error
-		if logOutputFile, err = os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err != nil { //nolint: gosec,G302,G304
+		if logOutputFile, err = os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err != nil { //nolint: gosec
 			return err
 		}
 		output = io.MultiWriter(logOutputFile, terminalOutput)

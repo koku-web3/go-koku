@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+	"math/big"
 )
 
 // ECDSAAlgorithm ECDSA 算法实现
@@ -37,6 +38,21 @@ func (a *ECDSAAlgorithm) GenerateKey() (crypto.PrivateKey, crypto.PublicKey, err
 		return nil, nil, fmt.Errorf("failed to generate ECDSA key: %w", err)
 	}
 	return priv, &priv.PublicKey, nil
+}
+
+// NewPrivateKeyFromBytes 从原始私钥字节创建 ECDSA 私钥对象
+// 用于 BIP-32/BIP-44 派生子密钥的场景
+func (a *ECDSAAlgorithm) NewPrivateKeyFromBytes(privKeyBytes []byte) (crypto.PrivateKey, error) {
+	if len(privKeyBytes) != 32 {
+		return nil, fmt.Errorf("invalid private key length: expected 32, got %d", len(privKeyBytes))
+	}
+
+	priv := new(ecdsa.PrivateKey)
+	priv.Curve = a.curve
+	priv.D = new(big.Int).SetBytes(privKeyBytes)
+	priv.PublicKey.X, priv.PublicKey.Y = a.curve.ScalarBaseMult(privKeyBytes)
+
+	return priv, nil
 }
 
 // Sign 对消息进行 ECDSA 签名

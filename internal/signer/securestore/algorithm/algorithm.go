@@ -15,6 +15,10 @@ type KeyAlgorithm interface {
 	// GenerateKey 生成密钥对
 	GenerateKey() (crypto.PrivateKey, crypto.PublicKey, error)
 
+	// NewPrivateKeyFromBytes 从原始私钥字节创建私钥对象
+	// 用于 BIP-32/BIP-44 派生子密钥的场景
+	NewPrivateKeyFromBytes(privKeyBytes []byte) (crypto.PrivateKey, error)
+
 	// Sign 对消息进行签名
 	Sign(privateKey crypto.PrivateKey, message []byte) ([]byte, error)
 

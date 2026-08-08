@@ -355,7 +355,7 @@ func writePosIntWidth(b *bytes.Buffer, i, width int) {
 	for i >= 10 || width > 1 {
 		width--
 		q := i / 10
-		bb[bp] = byte('0' + i - q*10) //nolint: gosec,G115
+		bb[bp] = byte('0' + i - q*10) //nolint: gosec
 		bp--
 		i = q
 	}

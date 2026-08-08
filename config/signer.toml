@@ -1,6 +1,6 @@
 [grpc]
 host = "127.0.0.1"
-port = 50051
+port = 50052
 
 [vault]
 address = "http://127.0.0.1:8200"        # Vault服务器地址
