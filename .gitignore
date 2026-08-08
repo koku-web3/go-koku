@@ -1,0 +1,9 @@
+.cursor/
+.vscode/
+__debug_bin
+bin/
+ai/
+
+.DS_Store
+
+*.log

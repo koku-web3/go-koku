@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package signer;
+
+option go_package = "github.com/koku-web3/go-koku/internal/signer/grpc;grpc";
+
+// 创建主密钥请求
+message CreateMasterKeyRequest {
+    string trace_id = 1;       // 链路跟踪ID，必填
+    string chain_code = 2;      // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
+    string key_type = 3;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+}
+
+// 创建主密钥响应
+message CreateMasterKeyResponse {
+    string key_name = 1;        // 主密钥名称
+    string seed = 2;            // 主密钥种子（base64），用于备份
+}
+
+// 创建密钥请求
+message CreateKeyRequest {
+    string trace_id = 1;       // 链路跟踪ID，必填
+    string chain_code = 2;      // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
+    string master_key_name = 3; // 主密钥名称，1-36必填，唯一
+    string key_context = 4;     // 密钥派生上下文标识符，1-36必填，唯一
+    string key_type = 5;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+    // BIP-44 派生路径参数
+    uint32 account = 6;         // 账户索引，默认 0
+    uint32 change = 7;          // 0=外部链，1=内部链，默认 0
+    uint32 address_index = 8;   // 地址索引，默认 0
+}
+
+// 创建密钥响应
+message CreateKeyResponse {
+    string priv_key_ciphertext = 1; // 加密后的私钥，base64格式
+    string public_key = 2;          // 公钥，base64格式
+}
+
+// 签名请求
+message SignRequest {
+    string trace_id = 1;            // 链路跟踪ID，必填
+    string chain_code = 2;          // 区块链名称，1-36必填
+    string master_key_name = 3;     // 主密钥名称，1-36必填
+    string key_context = 4;         // 密钥派生上下文标识符，1-36必填
+    string key_type = 5;           // 密钥类型，1-36必填
+    string message = 6;            // 待签名数据，1-1024必填
+    string priv_key_ciphertext = 7; // 私钥密文，1-1024必填
+}
+
+// 签名响应
+message SignResponse {
+    string signature = 1; // 已签名数据，base64格式
+}
+
+// Signer 服务
+service Signer {
+    // 创建主密钥
+    rpc CreateMasterKey(CreateMasterKeyRequest) returns (CreateMasterKeyResponse);
+    // 创建密钥
+    rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+    // 消息签名
+    rpc Sign(SignRequest) returns (SignResponse);
+}
