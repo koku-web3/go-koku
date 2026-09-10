@@ -1,0 +1,75 @@
+[grpc]
+host = "0.0.0.0"
+port = 50051
+
+[tls]
+enable = true
+ca_cert_file = "/etc/koku/certs/ca/ca.pem"
+server_cert_file = "/etc/koku/certs/server/coordinator.pem"
+server_key_file = "/etc/koku/certs/server/coordinator.key"
+
+[signer]
+address = "signer:50052"
+
+[signer.tls]
+server_name = "signer"
+
+[keycreator]
+address = "key-creator:50053"
+
+[keycreator.tls]
+server_name = "key-creator"
+
+[txbuilder]
+dial_timeout = 10
+
+[txbuilder.keepalive]
+time = 30
+timeout = 10
+permit_without_stream = true
+
+[txbuilder.circuit_breaker]
+failure_threshold = 5
+recovery_window = 30
+
+[txbuilder.chains.btc]
+address = "btc-txbuilder:50101"
+
+[txbuilder.chains.eth]
+address = "eth-txbuilder:50102"
+
+[txbuilder.chains.tron]
+address = "tron-txbuilder:50103"
+
+[mq]
+url = "amqp://guest:guest@rabbitmq:5672/"
+exchange = "koku.universal.transfer"
+exchange_type = "direct"
+prefetch_count = 32
+queue_acct0 = "universal.transfer.acct0"
+queue_acct1 = "universal.transfer.acct1"
+routing_key_acct0 = "acct0"
+routing_key_acct1 = "acct1"
+dial_timeout_sec = 10
+heartbeat_sec = 30
+reconnect_interval_sec = 5
+
+[db]
+host = "mysql"
+port = 3306
+user = "koku"
+password = "koku_pwd"
+database = "koku"
+max_open_conns = 1000
+max_idle_conns = 1000
+
+[log]
+rotation = true
+file_path = ""
+max_size_mb = 100
+max_backups = 10
+max_age = 30
+compress = true
+format = "terminal"
+verbosity = 3
+vmodule = ""

@@ -1,0 +1,33 @@
+[grpc]
+host = "0.0.0.0"
+port = 50052
+
+[tls]
+enable = true
+ca_cert_file = "/etc/koku/certs/ca/ca.pem"
+server_cert_file = "/etc/koku/certs/server/signer.pem"
+server_key_file = "/etc/koku/certs/server/signer.key"
+
+[vault]
+address = "https://127.0.0.1:8200"
+mount_path = "aws"
+role_name = "role-signer"
+token_refresh_interval = 3500
+vault_ca_cert_file = "/etc/koku/certs/ca/ca.pem"
+
+[aws]
+iam_user_enable = true                                             # true: 使用 access_key/secret_key (本地测试), false: 使用 EC2 Instance Profile (生产部署)
+access_key = "AKIAU2CJR6GVAPIBXG7C"                                # AWS IAM 用户访问密钥 (仅 iam_user_enable=true 时使用), 用于让 Vault 的 AWS Auth Method 与 AWS 建立信任
+secret_key = "jdfZdKZbEHY+DqeYxOioRlRig1veHlcBF/+alWiN"            # AWS IAM 用户密钥 (仅 iam_user_enable=true 时使用), 用于让 Vault 的 AWS Auth Method 与 AWS 建立信任
+role_arn = "arn:aws:iam::330866749866:role/vault@signer-role"      # Vault Role 绑定的 AWS IAM Role ARN
+
+[log]
+rotation = true
+file_path = ""
+max_size_mb = 100
+max_backups = 10
+max_age = 30
+compress = true
+format = "terminal"
+verbosity = 3
+vmodule = ""

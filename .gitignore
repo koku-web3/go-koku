@@ -3,7 +3,16 @@
 __debug_bin
 bin/
 ai/
-
 .DS_Store
-
 *.log
+
+# mTLS certificates and keys - never commit secrets
+certs/
+
+cmd/key-creator/key-creator
+cmd/signer/signer
+cmd/coordinator/coordinator
+
+internal/kms-vault/secure/vault-init.json
+internal/kms-vault/vault-deploy/data
+internal/kms-vault/vault-deploy/local-config/certs/

@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
-	"github.com/koku-web3/go-koku/internal/coordinator/grpc"
-	signerclient "github.com/koku-web3/go-koku/internal/coordinator/signer"
+	grpcpkg "github.com/koku-web3/go-koku/internal/coordinator/grpc"
+	"github.com/koku-web3/go-koku/internal/coordinator/infra/setup"
+	"github.com/koku-web3/go-koku/internal/coordinator/mq"
+	"github.com/koku-web3/go-koku/internal/coordinator/service"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 )
 
@@ -20,23 +23,45 @@ func main() {
 
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
+		fatalf("Failed to load config: %v\n", err)
 	}
 
 	if err := log.SetupFromTOML(cfg.Path); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to setup log: %v", err)
-		os.Exit(1)
+		fatalf("Failed to setup log: %v\n", err)
 	}
 
-	// 创建 Signer 客户端
-	client, err := signerclient.NewClient(cfg.Signer.Address)
+	deps, err := setup.Wire(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create Signer client: %v", err)
-		os.Exit(1)
+		fatalf("Failed to wire denpendencies: %v\n", err)
 	}
+
+	keySvc := service.NewKeyService(deps.Repo, deps.KeyCreator, deps.TxBuilder)
+	transferSvc := service.NewTransferService(deps.Repo, deps.TxBuilder, deps.Signer)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	var wg sync.WaitGroup
+
+	grpcSrv := grpcpkg.NewServer(cfg, keySvc, deps.Repo, deps.ServerTLS)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := grpcSrv.RunForever(ctx); err != nil {
+			fatalf("gRPC server run failed: %v\n", err)
+		}
+	}()
+
+	mqConsumer, err := mq.NewConsumer(ctx, cfg.MQ, transferSvc, deps.Repo)
+	if err != nil {
+		fatalf("Failed to create MQ Consumer: %v\n", err)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := mqConsumer.RunForever(); err != nil {
+			fatalf("MQ Consumer run failed: %v\n", err)
+		}
+	}()
 
 	go func() {
 		quitCh := make(chan os.Signal, 1)
@@ -46,9 +71,12 @@ func main() {
 		cancel()
 	}()
 
-	// 启动 gRPC 服务
-	server := grpc.NewServer(client, &cfg.GRPC)
-	if err := server.Start(ctx); err != nil {
-		log.Error("gRPC server error", "error", err)
-	}
+	wg.Wait()
+	deps.Close()
+	log.Info("Coordinator shutdown complete")
+}
+
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format, args...)
+	os.Exit(1)
 }

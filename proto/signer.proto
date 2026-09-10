@@ -2,73 +2,45 @@ syntax = "proto3";
 
 package signer;
 
-option go_package = "github.com/koku-web3/go-koku/internal/signer/grpc;grpc";
+// 前面的路径：告诉 protoc-gen-go 生成的 pb.go 文件放到/对应..proto/signer目录
+// 后面的路径：生成的 package 名称为 signer
+option go_package = "github.com/koku-web3/go-koku/pkg/proto/signer;signer";
 
-// 创建主密钥请求
-message CreateMasterKeyRequest {
-    string trace_id = 1;       // 链路跟踪ID，必填
-    string chain_code = 2;      // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
-    string key_type = 3;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+// Signer 服务
+service Signer {
+  // 健康检查
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  // 使用 BIP44 路径 Account=0(运营密钥) 的子密钥签名消息
+  // 场景：归集、出账
+  rpc SignAcct0(SignRequest) returns (SignResponse);
+  // 使用 BIP44 路径 Account=1(用户密钥) 的子密钥签名消息
+  // 场景：归集
+  rpc SignAcct1(SignRequest) returns (SignResponse);
 }
 
-// 创建主密钥响应
-message CreateMasterKeyResponse {
-    string key_name = 1;        // 主密钥名称
-    string seed = 2;            // 主密钥种子（base64），用于备份
+// ============ 健康检查 ============
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
 }
 
-// 密钥用途
-enum KeyUsage {
-    KEY_USAGE_UNSPECIFIED = 0;
-    KEY_USAGE_OPERATIONAL = 1; // 运营用途，内部操作
-    KEY_USAGE_USER = 2;        // 用户用途，出入金
-}
-
-// 创建密钥请求
-message CreateKeyRequest {
-    string trace_id = 1;       // 链路跟踪ID，必填
-    string chain_code = 2;      // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
-    string master_key_name = 3; // 主密钥名称，1-36必填，唯一
-    string master_key_pem_ciphertext = 10; // 主密钥PEM密文（base64），CreateMasterKey返回的seed，必填
-    string key_context = 4;     // 密钥派生上下文标识符，1-36必填，唯一
-    KeyUsage key_usage = 5;     // 密钥用途：运营或用户
-    string key_type = 6;       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
-    // BIP-44 派生路径参数
-    uint32 account = 7;         // 账户索引，默认 0
-    uint32 change = 8;          // 0=外部链，1=内部链，默认 0
-    uint32 address_index = 9;   // 地址索引，默认 0
-}
-
-// 创建密钥响应
-message CreateKeyResponse {
-    string priv_key_ciphertext = 1; // 加密后的私钥，base64格式
-    string public_key = 2;          // 公钥，base64格式
-}
+// ============ 消息签名 ============
 
 // 签名请求
 message SignRequest {
-    string trace_id = 1;            // 链路跟踪ID，必填
-    string chain_code = 2;          // 区块链名称，1-36必填
-    string master_key_name = 3;     // 主密钥名称，1-36必填
-    string key_name = 4;            // 派生密钥名称，格式：{chain}-child-{op|user}-{index}
-    KeyUsage key_usage = 5;         // 密钥用途
-    string key_context = 6;         // 密钥派生上下文，用于解密
-    string key_type = 7;           // 密钥类型，1-36必填
-    string message = 8;            // 待签名数据，1-1024必填
-    string priv_key_ciphertext = 9; // 私钥密文，1-1024必填
+  string trace_id = 1; // 链路跟踪ID，必填
+  string chain_code = 2; // 区块链名称，1-36必填
+  string bip44_path = 3; // BIP-44路径，格式：m/44'/60'/0'/0/0
+  string key_type = 4; // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+  string message = 5; // 待签名数据，1-1024必填
+  string priv_key_ciphertext = 6; // 私钥密文，1-1024必填
 }
 
 // 签名响应
 message SignResponse {
-    string signature = 1; // 已签名数据，base64格式
+  string signature = 1; // 已签名数据，返回 hex 格式
 }
 
-// Signer 服务
-service Signer {
-    // 创建主密钥
-    rpc CreateMasterKey(CreateMasterKeyRequest) returns (CreateMasterKeyResponse);
-    // 创建密钥
-    rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
-    // 消息签名
-    rpc Sign(SignRequest) returns (SignResponse);
-}
+

@@ -2,127 +2,172 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
-	signerclient "github.com/koku-web3/go-koku/internal/coordinator/signer"
+	"github.com/koku-web3/go-koku/internal/coordinator/repository"
+	"github.com/koku-web3/go-koku/internal/coordinator/service"
+	"github.com/koku-web3/go-koku/pkg/keyutil"
 	log "github.com/koku-web3/go-koku/pkg/logko"
+	proto "github.com/koku-web3/go-koku/pkg/proto/coordinator"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 )
 
-// Server Coordinator gRPC 服务端
-// 作为转发层，将请求转发给 Signer 服务
 type Server struct {
-	UnimplementedChainServiceServer
-	client  *signerclient.Client
+	proto.UnimplementedCoordinatorServer
+	repo    repository.KeyRepository
+	keySvc  service.KeyService
 	grpcSrv *grpc.Server
 	host    string
 	port    int
+	tlsCfg  *tls.Config
 }
 
-// NewServer 创建 gRPC 服务端
-func NewServer(client *signerclient.Client, cfg *config.GRPCConfig) *Server {
+func NewServer(cfg *config.Config, keySvc service.KeyService, repo repository.KeyRepository, tlsCfg *tls.Config) *Server {
 	return &Server{
-		client: client,
-		host:   cfg.Host,
-		port:   cfg.Port,
+		repo:   repo,
+		keySvc: keySvc,
+		host:   cfg.GRPC.Host,
+		port:   cfg.GRPC.Port,
+		tlsCfg: tlsCfg,
 	}
 }
 
-// Start 启动 gRPC 服务
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) RunForever(ctx context.Context) error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	s.grpcSrv = grpc.NewServer()
-	RegisterChainServiceServer(s.grpcSrv, s)
-
+	if s.tlsCfg != nil {
+		creds := credentials.NewTLS(s.tlsCfg)
+		s.grpcSrv = grpc.NewServer(grpc.Creds(creds))
+		log.Info("Starting Coordinator gRPC server with mTLS", "address", addr)
+	} else {
+		s.grpcSrv = grpc.NewServer()
+		log.Warn("Starting Coordinator gRPC server without TLS (insecure)", "address", addr)
+	}
+	proto.RegisterCoordinatorServer(s.grpcSrv, s)
 	reflection.Register(s.grpcSrv)
 
-	log.Info("Starting Coordinator gRPC server", "address", addr)
-
-	go s.StopWhenCancelled(ctx)
-
+	go s.stopOnCancel(ctx)
 	return s.grpcSrv.Serve(lis)
 }
 
-// Shutdown 优雅关闭：先关闭 client，再停止 gRPC server
-func (s *Server) StopWhenCancelled(ctx context.Context) {
+func (s *Server) stopOnCancel(ctx context.Context) {
 	<-ctx.Done()
-
-	log.Info("Closing signer client")
-	if err := s.client.Close(); err != nil {
-		log.Error(fmt.Sprintf("close signer client failed: %v", err))
-	}
-
 	log.Info("Shutting down gRPC server")
 	s.grpcSrv.GracefulStop()
 }
 
-// HealthCheck 健康检查
-func (s *Server) HealthCheck(ctx context.Context, req *HealthCheckRequest) (*HealthCheckResponse, error) {
-	return &HealthCheckResponse{
-		Status: "ok",
-	}, nil
+func (s *Server) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
+	return &proto.HealthCheckResponse{Status: "ok"}, nil
 }
 
-// CreateMasterKey 创建主密钥
-func (s *Server) CreateMasterKey(ctx context.Context, req *CreateMasterKeyRequest) (*CreateMasterKeyResponse, error) {
-	log.Info("CreateMasterKey", "trace_id", req.TraceId, "chain", req.Chain, "key_type", req.KeyType)
+func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
+	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode, "keyType", req.KeyType)
 
-	result, err := s.client.CreateMasterKey(ctx, req.TraceId, req.Chain, req.KeyType)
-	if err != nil {
-		log.Error("CreateMasterKey failed", "error", err)
-		return nil, fmt.Errorf("failed to create master key: %w", err)
-	}
+	err := s.keySvc.Genesis(ctx, &service.GenesisInput{
+		TraceID:   req.TraceId,
+		ChainCode: req.ChainCode,
+		KeyType:   req.KeyType,
+	})
 
-	return &CreateMasterKeyResponse{
-		TraceId:        result.TraceID,
-		KeyName:        result.KeyName,
-		SeedCiphertext: result.SeedCiphertext,
-		PublicKey:      result.PublicKey,
-		Bip44Path:      result.BIP44Path,
-	}, nil
+	log.Info("Genesis completed", "success", err == nil)
+	return &proto.GenesisResponse{Success: err == nil}, err
 }
 
-// CreateDerivedKey 创建派生密钥
-func (s *Server) CreateDerivedKey(ctx context.Context, req *CreateDerivedKeyRequest) (*CreateDerivedKeyResponse, error) {
-	log.Info("CreateDerivedKey", "trace_id", req.TraceId, "chain", req.Chain, "master_key_name", req.MasterKeyName)
+func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
+	log.Info("CreateOperationalKey", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
 
-	result, err := s.client.CreateDerivedKey(ctx, req.TraceId, req.Chain, req.MasterKeyName, req.MasterKeyPemCiphertext, int32(req.KeyUsage), req.KeyType, req.AddressIndex)
-	if err != nil {
-		log.Error("CreateDerivedKey failed", "error", err)
-		return nil, fmt.Errorf("failed to create derived key: %w", err)
-	}
+	result, err := s.keySvc.CreateKey(ctx, &service.CreateKeyInput{
+		TraceID:   req.TraceId,
+		ChainCode: req.ChainCode,
+		Usage:     keyutil.KEY_USAGE_OPERATIONAL,
+		Count:     req.Count,
+	})
 
-	return &CreateDerivedKeyResponse{
-		TraceId:           result.TraceID,
-		KeyName:           result.KeyName,
-		PrivKeyCiphertext: result.PrivKeyCiphertext,
-		PublicKey:         result.PublicKey,
-		Bip44Path:         result.BIP44Path,
-		KeyContext:        result.KeyContext,
-	}, nil
+	log.Info("CreateOperationalKey completed", "result", result, "error", err)
+	return &proto.CreateKeyResponse{
+		Success:     err == nil,
+		AddressList: result,
+	}, err
 }
 
-// Sign 签名消息
-func (s *Server) Sign(ctx context.Context, req *SignRequest) (*SignResponse, error) {
-	log.Info("Sign", "trace_id", req.TraceId, "chain", req.Chain, "key_name", req.KeyName)
+func (s *Server) CreateUserKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
+	log.Info("CreateUserKey", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
 
-	result, err := s.client.Sign(ctx, req.TraceId, req.Chain, req.KeyName, int32(req.KeyUsage), req.KeyType, req.KeyContext, req.Message, req.PrivKeyCiphertext)
+	result, err := s.keySvc.CreateKey(ctx, &service.CreateKeyInput{
+		TraceID:   req.TraceId,
+		ChainCode: req.ChainCode,
+		Usage:     keyutil.KEY_USAGE_USER,
+		Count:     req.Count,
+	})
+
+	log.Info("CreateUserKey completed", "result", result, "error", err)
+	return &proto.CreateKeyResponse{
+		Success:     err == nil,
+		AddressList: result,
+	}, err
+}
+
+func (s *Server) VerifyAddress(ctx context.Context, req *proto.VerifyAddressRequest) (*proto.VerifyAddressResponse, error) {
+	log.Info("VerifyAddress", "trace_id", req.TraceId, "chain_code", req.ChainCode, "address", req.Address)
+
+	valid, err := s.keySvc.VerifyAddress(ctx, &service.VerifyAddressInput{
+		TraceID:   req.TraceId,
+		ChainCode: req.ChainCode,
+		Address:   req.Address,
+	})
 	if err != nil {
-		log.Error("Sign failed", "error", err)
-		return nil, fmt.Errorf("failed to sign: %w", err)
+		return nil, err
 	}
 
-	return &SignResponse{
-		TraceId:   result.TraceID,
-		Signature: result.Signature,
+	log.Info("VerifyAddress completed", "is_valid", valid, "error", err)
+	return &proto.VerifyAddressResponse{IsValid: valid}, nil
+}
+
+func (s *Server) VerifyContractAddress(ctx context.Context, req *proto.VerifyContractAddressRequest) (*proto.VerifyContractAddressResponse, error) {
+	log.Info("VerifyContractAddress", "trace_id", req.TraceId, "chain_code", req.ChainCode, "address", req.Address)
+
+	valid, err := s.keySvc.VerifyContractAddress(ctx, &service.VerifyContractAddressInput{
+		TraceID:   req.TraceId,
+		ChainCode: req.ChainCode,
+		Address:   req.Address,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("VerifyContractAddress completed", "is_valid", valid)
+	return &proto.VerifyContractAddressResponse{IsValid: valid}, nil
+}
+
+func (s *Server) CheckSufficientBalance(ctx context.Context, req *proto.CheckSufficientBalanceRequest) (*proto.CheckSufficientBalanceResponse, error) {
+	log.Info("CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "is_base_coin", req.IsBasicCoin, "from", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
+
+	result, err := s.keySvc.CheckSufficientBalance(ctx, &service.BalanceInput{
+		TraceID:     req.TraceId,
+		ChainCode:   req.ChainCode,
+		Coin:        req.Coin,
+		IsBasicCoin: req.IsBasicCoin,
+		FromAddress: req.FromAddress,
+		Amount:      req.Amount,
+		Contract:    req.Contract,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("CheckSufficientBalance completed", "is_coin_sufficient", result.IsCoinSufficient, "is_token_sufficient", result.IsTokenSufficient)
+	return &proto.CheckSufficientBalanceResponse{
+		IsCoinSufficient:  result.IsCoinSufficient,
+		IsTokenSufficient: result.IsTokenSufficient,
 	}, nil
 }

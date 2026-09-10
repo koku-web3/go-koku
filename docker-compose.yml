@@ -1,0 +1,136 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 — persists all key / chain / audit data
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_koku
+      MYSQL_DATABASE: koku
+      MYSQL_USER: koku
+      MYSQL_PASSWORD: koku_pwd
+    volumes:
+      # Initialise schema on first boot (GORM AutoMigrate also creates tables on
+      # coordinator startup, so this is a belt-and-suspenders backup).
+      - ./migrations/001_create_keys_tables.sql:/docker-entrypoint-initdb.d/001_create_keys_tables.sql:ro
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukoku", "-pkoku_pwd"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - koku-net
+
+  # ---------------------------------------------------------------------------
+  # RabbitMQ 3.x — handles transfer message queue
+  # ---------------------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI (guest/guest)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - koku-net
+
+  # ---------------------------------------------------------------------------
+  # Signer — cryptographic signing service (gRPC :50052)
+  # ---------------------------------------------------------------------------
+  signer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    command: ["/app/signer", "-config", "/app/config/signer.docker.toml"]
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./config/signer.docker.toml:/app/config/signer.docker.toml:ro
+      - ./certs:/etc/koku/certs:ro
+    networks:
+      - koku-net
+    depends_on:
+      # Signer depends on Vault which is excluded from this compose, so we
+      # start it regardless and let it retry until Vault is available.
+      - coordinator
+
+  # ---------------------------------------------------------------------------
+  # Key-Creator — HD key generation service (gRPC :50053)
+  # ---------------------------------------------------------------------------
+  key-creator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    command: ["/app/key-creator", "-config", "/app/config/keycreator.docker.toml"]
+    ports:
+      - "50053:50053"
+    volumes:
+      - ./config/keycreator.docker.toml:/app/config/keycreator.docker.toml:ro
+      - ./certs:/etc/koku/certs:ro
+    networks:
+      - koku-net
+    depends_on:
+      # Same as signer — depends on Vault which is excluded.
+      - coordinator
+
+  # ---------------------------------------------------------------------------
+  # Coordinator — main orchestration service (gRPC :50051)
+  # ---------------------------------------------------------------------------
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    command: ["/app/coordinator", "-config", "/app/config/coordinator.docker.toml"]
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./config/coordinator.docker.toml:/app/config/coordinator.docker.toml:ro
+      - ./certs:/etc/koku/certs:ro
+    networks:
+      - koku-net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      signer:
+        condition: service_started
+      key-creator:
+        condition: service_started
+
+# ---------------------------------------------------------------------------
+# Named volumes — survive `docker compose down`
+# ---------------------------------------------------------------------------
+volumes:
+  mysql_data:
+  rabbitmq_data:
+
+# ---------------------------------------------------------------------------
+# Shared network — all containers can reach each other by service name
+# ---------------------------------------------------------------------------
+networks:
+  koku-net:
+    driver: bridge

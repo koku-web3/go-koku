@@ -74,11 +74,11 @@ sudo chmod +x /usr/local/bin/vault
 
 1、创建 docker-compose.yml 文件
 
-```bash
+```dockerfile
 version: '3.7'
 services:
   vault:
-    image: hashicorp/vault:latest
+    image: hashicorp/vault:v2.0.3
     container_name: vault
     ports:
       - "8200:8200"
@@ -131,7 +131,7 @@ disable_mlock = true
 
 # 3. 数据落盘存储（使用本地 Raft）
 storage "raft" {
-  path    = "/Users/jan/vault/data"
+  path    = "/Users/../vault/data"
   node_id = "vault_node_a"
 }
 
@@ -246,10 +246,10 @@ vault policy write bitcoin-policy ./bitcoin-policy.hcl
 > 提示：继续前请先自行了解AWS IAM Role/User相关概念。
 
 **架构简述**
-`chain-ser`服务和`vault`服务分别部署在不同的AWS EC2（同一个内网）。使用 AWS IAM Role 主要作用是做身份认证：
+`key-creator`服务和`vault`服务分别部署在不同的AWS EC2（同一个内网）。使用 AWS IAM Role 主要作用是做身份认证：
 
 - 在AWS先创建一个Role`vault-auth-role`并让`vault`服务绑定概角色和对应的策略。
-- 在AWS创建另一个Role`chain-serv-ec2-role`绑定到 `chain-ser`的EC2，赋予它有权限扮演`vault-auth-role`角色。
+- 在AWS创建另一个Role`key-creator-serv-ec2-role`绑定到 `key-creator-ser`的EC2，赋予它有权限扮演`vault-auth-role`角色。
 
 
 
@@ -282,7 +282,7 @@ vault policy write bitcoin-policy ./bitcoin-policy.hcl
 
 
 
-### 7.2 创建角色 chain-serv-ec2-role
+### 7.2 创建角色 key-creator-serv-ec2-role
 
 
 
@@ -318,14 +318,14 @@ vault policy write bitcoin-policy ./bitcoin-policy.hcl
 ```
 
 - 点击 **Next → Next**
-- Policy name: `chain-serv-ec2-policy`
+- Policy name: `key-creator-serv-ec2-policy`
 - 点击 **Create policy**
 
-返回角色创建页面，勾选刚创建的 `chain-serv-ec2-policy`，点击 **Next**
+返回角色创建页面，勾选刚创建的 `key-creator-serv-ec2-policy`，点击 **Next**
 
 ##### 4. 设置角色名称
 
-- Role name: `chain-serv-ec2-role`
+- Role name: `key-creator-serv-ec2-role`
 - 点击 **Create role**
 
 
@@ -343,7 +343,7 @@ vault policy write bitcoin-policy ./bitcoin-policy.hcl
     {
       "Effect": "Allow",
       "Principal": {
-        "AWS": "arn:aws:iam::<你的AWS账户ID>:role/chain-serv-ec2-role"
+        "AWS": "arn:aws:iam::<你的AWS账户ID>:role/key-creator-serv-ec2-role"
       },
       "Action": "sts:AssumeRole"
     }
@@ -355,10 +355,10 @@ vault policy write bitcoin-policy ./bitcoin-policy.hcl
 
 ### 7.4 EC2关联 Instance Profile（实例文件）
 
-> 注意：仅需在部署`chain-ser`的 EC2 配置，`vault`不需要。
+> 注意：仅需在部署`key-creator`的 EC2 配置，`vault`不需要。
 
 在启动EC2实例时配置：
-EC2 → 实例 → 启动新实例 → 高级详细信息 → 在“IAM 实例配置文件”项选择前面创建的`chain-serv-ec2-role` → 完成
+EC2 → 实例 → 启动新实例 → 高级详细信息 → 在“IAM 实例配置文件”项选择前面创建的`key-creator-serv-ec2-role` → 完成
 
 ## 8、Vault Role
 
@@ -381,6 +381,36 @@ curl --header "X-Vault-Token: <root_token>" \
 
 执行命令`vault read auth/aws/role/bitcoin-client` 查看是否已绑定成功。
 
-## 9、提供服务
+## 9 transit引擎激活
 
-启动`chain-serv`调用该服务，`chain-serv`接口文档[https://github.com/Koku-Web3/chain-serv](https://github.com/Koku-Web3/chain-ser)。
+按功能划分出3个transit引擎，主要使用的密钥类型是 `aes256-gcm96`，GCM模式的AES对称加密，96为随机数。
+
+格式：`transit/{transit_name}/{key_name}`
+
+- `transit/core/{chainCode}-masterkey` **负责核心密钥：** 一个区块链对应一把主密钥，遵循BIP-44规则派生；主密钥的种子（Seed）、该Seed派生的两把密钥（account为 0 和 1） 使用此引擎下派生的密钥进行加解密。
+- `transit/operations/{chainCode}-privkey` **负责运营密钥：** 包括财务密钥、归集地址密钥、手续费地址密钥等；使用此引擎下派生的密钥进行加解密。
+- `transit/user/{chainCode}-privkey` **负责用户密钥** 用户充值、提现地址密钥；使用此引擎下派生的密钥进行加解密。
+
+其中：
+
+- {transit_name}：core、operations、user
+- {key_name}：{chainCode}-masterkey、{chainCode}-privkey、{chainCode}-privkey
+
+
+
+## 9.1 示例
+
+加密的路径格式为：`transit/{transit_name}/encrypt/{key_name}`。
+
+以下展示以太坊链对**主密钥种子**进行加密
+
+```bash
+ curl --header "X-Vault-Token: hvs.g1bZWi6flTJdB5GZopREVdBU" \
+     --request POST \
+     --data '{
+       "plaintext": "MTIzNDU2Nzg5MA==",
+       "context": "ZXRoZXJldW0tdGVzdC11c2VyLTE="
+     }' \
+     http://127.0.0.1:8200/v1/transit/core/encrypt/masterkey
+```
+

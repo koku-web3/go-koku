@@ -1,0 +1,40 @@
+# =============================================================================
+# Stage 1: Build all 3 Go binaries
+# =============================================================================
+FROM --platform=linux/amd64 golang:1.27-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /src
+
+# Download dependencies first (layer cache optimisation)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build all 3 binaries in one layer
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/coordinator  ./cmd/coordinator && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/signer       ./cmd/signer       && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/key-creator  ./cmd/key-creator
+
+# =============================================================================
+# Stage 2: Runtime image
+# =============================================================================
+FROM --platform=linux/amd64 gcr.io/distroless/static-debian12:nonroot AS runtime
+
+# Create non-root user and app directory
+RUN mkdir -p /app && useradd -u 10001 -U appuser && chown -R appuser:appuser /app
+USER appuser
+
+WORKDIR /app
+
+# Copy binaries from builder
+COPY --from=builder /out/* /app/
+
+# Config files are mounted via docker-compose; the directory must exist
+RUN mkdir -p /app/config
+
+EXPOSE 50051 50052 50053
+
+ENTRYPOINT ["/app/coordinator"]

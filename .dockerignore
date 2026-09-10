@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+coordinator
+signer
+key-creator
+cmd/coordinator/coordinator
+cmd/signer/signer
+cmd/key-creator/key-creator
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Local config variants (use .docker.toml via mounts instead)
+config/*.local.toml
+
+# Logs
+*.log
+logs/
+
+# Vendor (we rely on go mod download, not vendoring)
+vendor/
+
+# Documentation (not needed in image)
+*.md
+docs/
+proto/README.md
+
+# Tests
+*_test.go
+**/*_test.go

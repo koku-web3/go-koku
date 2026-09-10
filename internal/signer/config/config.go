@@ -12,6 +12,7 @@ type Config struct {
 	AWS   AWSConfig   `toml:"aws"`
 	Log   LogConfig   `toml:"log"`
 	GRPC  GRPCConfig  `toml:"grpc"`
+	TLS   TLSConfig   `toml:"tls"`
 	Path  string
 }
 
@@ -20,6 +21,7 @@ type VaultConfig struct {
 	MountPath            string `toml:"mount_path"`
 	RoleName             string `toml:"role_name"`
 	TokenRefreshInterval int    `toml:"token_refresh_interval"`
+	CACertFile           string `toml:"vault_ca_cert_file"` // 用于验证 Vault 服务器证书的 CA 证书
 }
 
 type AWSConfig struct {
@@ -33,6 +35,13 @@ type GRPCConfig struct {
 	Enable bool   `toml:"enable"`
 	Host   string `toml:"host"`
 	Port   int    `toml:"port"`
+}
+
+type TLSConfig struct {
+	Enable         bool   `toml:"enable"`
+	CACertFile     string `toml:"ca_cert_file"`
+	ServerCertFile string `toml:"server_cert_file"`
+	ServerKeyFile  string `toml:"server_key_file"`
 }
 
 type LogConfig struct {
@@ -66,6 +75,19 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	cfg.Path = path
+
+	// TLS 配置校验（默认强制开启）
+	if cfg.TLS.Enable {
+		if cfg.TLS.CACertFile == "" {
+			return nil, fmt.Errorf("tls.ca_cert_file is required when tls is enabled")
+		}
+		if cfg.TLS.ServerCertFile == "" {
+			return nil, fmt.Errorf("tls.server_cert_file is required when tls is enabled")
+		}
+		if cfg.TLS.ServerKeyFile == "" {
+			return nil, fmt.Errorf("tls.server_key_file is required when tls is enabled")
+		}
+	}
 
 	return cfg, nil
 }

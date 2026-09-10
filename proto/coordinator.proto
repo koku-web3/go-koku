@@ -2,25 +2,38 @@ syntax = "proto3";
 
 package coordinator;
 
-option go_package = "github.com/koku-web3/go-koku/internal/coordinator/grpc;grpc";
+option go_package = "github.com/koku-web3/go-koku/pkg/proto/coordinator;grpc";
 
-// ChainService gRPC 密钥管理服务
-// 作为转发层，将请求转发给 Signer 服务
+// Coordinator gRPC 密钥管理服务
+// 作为转发层，将请求转发给 Signer 和 TxBuilder 服务
 // 私钥明文仅存在于 Signer 服务内存中
-service ChainService {
+service Coordinator {
   // 健康检查
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 
-  // 创建主密钥
-  // 转发给 Signer 服务创建 HD 主密钥
-  rpc CreateMasterKey(CreateMasterKeyRequest) returns (CreateMasterKeyResponse);
+  // 生成核心主密钥
+  // 调用 KeyCreator 服务生成 HD 主密钥及其派生的核心密钥
+  rpc Genesis(GenesisRequest) returns (GenesisResponse);
 
-  // 创建派生密钥（运营/用户密钥）
-  rpc CreateDerivedKey(CreateDerivedKeyRequest) returns (CreateDerivedKeyResponse);
+  // 创建运营密钥
+  rpc CreateOperationalKey(CreateKeyRequest) returns (CreateKeyResponse);
 
-  // 签名消息
-  // 转发给 Signer 服务执行签名
-  rpc Sign(SignRequest) returns (SignResponse);
+  // 创建用户密钥
+  rpc CreateUserKey(CreateKeyRequest) returns (CreateKeyResponse);
+
+  // 校验地址是否合法
+  rpc VerifyAddress(VerifyAddressRequest) returns (VerifyAddressResponse);
+
+  // 校验合约地址是否合法
+  rpc VerifyContractAddress(VerifyContractAddressRequest) returns (VerifyContractAddressResponse);
+
+  // 检查地址是否有足够的余额转账
+  // 支持检查合约余额
+  rpc CheckSufficientBalance(CheckSufficientBalanceRequest) returns (CheckSufficientBalanceResponse);
+
+  // 通用转账
+  // 非UTXO，具有出账地址、入账地址、金额、合约地址等普遍通用的转账
+  rpc UniversalTransfer(UniversalTransferRequest) returns (UniversalTransferResponse);
 }
 
 // ============ 健康检查 ============
@@ -31,63 +44,93 @@ message HealthCheckResponse {
   string status = 1;
 }
 
-// ============ 创建主密钥 ============
+// ============ 生成核心主密钥 ============
 
-message CreateMasterKeyRequest {
-  string trace_id = 1;    // 链路跟踪 ID
-  string chain = 2;       // 区块链网络名称（如 ethereum）
-  string key_type = 3;    // 密钥类型（如 ecdsa-secp256k1）
+message GenesisRequest {
+  string trace_id = 1; // 链路跟踪 ID，1-36 必填
+  string chain_code = 2; // 区块链代码，1-36 必填
+  string key_type = 3; // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 }
 
-message CreateMasterKeyResponse {
+message GenesisResponse {
+  bool success = 1; // 执行结果
+}
+
+// ============ 创建密钥 ============
+
+message CreateKeyRequest {
+  string trace_id = 1; // 链路跟踪 ID，1-36 必填
+  string chain_code = 2; // 区块链代码，1-36 必填
+  int32 count = 3; // 生成密钥数量，范围 1-50
+}
+
+message CreateKeyResponse {
+  bool success = 1; // 执行结果
+  repeated AddressInfo address_list = 2; // 地址列表
+}
+
+// ============ 通用消息 ============
+
+message AddressInfo {
+  uint32 account_index = 1; // 账户索引
+  string address = 2; // 区块链地址
+}
+
+
+// ============ VerifyAddress ============
+
+message VerifyAddressRequest {
   string trace_id = 1;
-  string key_name = 2;      // 主密钥名称，格式：{chain}-master-key
-  string seed_ciphertext = 3; // Vault 加密的种子密文
-  string public_key = 4;    // 公钥
-  string bip44_path = 5;    // BIP-44 路径
+  string address = 2;
+  string chain_code = 3;
 }
 
-// ============ 创建派生密钥 ============
+message VerifyAddressResponse {
+  bool is_valid = 1;
+}
 
-message CreateDerivedKeyRequest {
+// ============ VerifyContractAddress ============
+
+message VerifyContractAddressRequest {
   string trace_id = 1;
-  string chain = 2;                       // 区块链网络名称
-  string master_key_name = 3;             // 主密钥名称
-  string master_key_pem_ciphertext = 10;  // 主密钥PEM密文（来自CreateMasterKey返回值）
-  KeyUsage key_usage = 4;                 // 密钥用途
-  string key_type = 5;                    // 密钥类型
-  uint32 address_index = 6;               // 地址索引
+  string address = 2;
+  string chain_code = 3;
 }
 
-enum KeyUsage {
-  KEY_USAGE_UNSPECIFIED = 0;
-  KEY_USAGE_OPERATIONAL = 1; // 运营用途
-  KEY_USAGE_USER = 2;        // 用户用途
+message VerifyContractAddressResponse {
+  bool is_valid = 1;
 }
 
-message CreateDerivedKeyResponse {
-  string trace_id = 1;
-  string key_name = 2;              // 派生密钥名称，格式：{chain}-child-{op|user}-{index}
-  string priv_key_ciphertext = 3;   // Vault 加密的私钥密文
-  string public_key = 4;            // 公钥
-  string bip44_path = 5;            // BIP-44 路径
-  string key_context = 6;           // Vault context
+// ============ CheckSufficientBalance ============
+
+message CheckSufficientBalanceRequest {
+  string trace_id = 1; // 1-36 必填
+  string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
+  string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
+  bool is_basic_coin = 4; // 必填；是否主链币
+  string from_address = 5; // 1-256 必填；转账发起地址
+  string amount = 6; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 7; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
 }
 
-// ============ 签名消息 ============
-
-message SignRequest {
-  string trace_id = 1;
-  string chain = 2;                // 区块链网络名称
-  string key_name = 3;             // 派生密钥名称
-  KeyUsage key_usage = 4;          // 密钥用途
-  string key_type = 5;             // 密钥类型
-  string key_context = 6;          // Vault context
-  string message = 7;              // 待签名数据
-  string priv_key_ciphertext = 8;   // 私钥密文
+message CheckSufficientBalanceResponse {
+  bool is_coin_sufficient = 1; // 主链币是否足够
+  bool is_token_sufficient = 2; // 合约余额是否足够；注意当检查合约余额时两个返回值都需要判断
 }
 
-message SignResponse {
-  string trace_id = 1;
-  string signature = 2; // 签名结果（hex 格式）
+// ============ UniversalTransfer ============
+
+message UniversalTransferRequest {
+  string trace_id = 1; // 1-36 必填
+  string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
+  string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
+  bool is_basic_coin = 4; // 必填；是否主链币
+  string from_address = 5; // 1-256 必填；转账发起地址 
+  string to_address = 6; // 1-256 必填；转账接收地址
+  string amount = 7; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 8; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+}
+
+message UniversalTransferResponse {
+  bool ok = 1; // 已处理
 }

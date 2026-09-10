@@ -1,0 +1,20 @@
+# ------------------------------------------------------------------
+# 集群共享网络与数据卷定义
+# 该文件会被 vault.compose.yml 通过 "include" 指令引入，
+# 目的是让集群内所有节点共用同一个网络，从而可以用容器名（hostname）互相访问
+# ------------------------------------------------------------------
+
+networks:
+  vault_cluster: # compose 内部引用这个网络时使用的名字（resource key）
+    name: vault-network # 实际在 docker network ls 中显示的网络名
+    driver: bridge # 使用 bridge（桥接）网络模式，容器间可通过容器名互通
+    ipam: # IP Address Management, IP 地址管理配置（可选，若不关心具体网段可以省略整个 ipam 块）
+      config:
+        - subnet: "192.168.42.128/25" # 该网络使用的子网段
+          ip_range: "192.168.42.128/25" # 分配给容器的 IP 范围（一般与 subnet 保持一致或是子集）
+          gateway: "192.168.42.129" # 网络的出口网关，容器访问网络外地址时会通过这个 IP 转发，必须在 subnet 范围内，且通常不能等于 subnet 的网络地址
+
+volumes:
+  vault-config: # compose 内部引用这个数据卷时使用的名字
+    external: true # 表示这个卷是"外部已存在"的卷，而不是由这个 compose 文件创建
+    name: vault-config # 引用的实际卷名，需与 Step 1 中 docker volume create 创建的名字一致
