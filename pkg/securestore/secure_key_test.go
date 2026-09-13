@@ -14,12 +14,18 @@ import (
 	"github.com/tyler-smith/go-bip32"
 )
 
+const (
+	algoIDECDSA   = "ecdsa-p256"
+	algoIDEdDSA   = "eddsa-ed25519"
+	algoIDSecp256 = "ecdsa-secp256k1"
+)
+
 // buildPEMPrivateKey 通过算法生成一对密钥并返回 PKCS#8 DER + PEM(base64) 形式
 func buildPEMPrivateKey(t *testing.T, algoID string) (cryptoKey interface{}, der []byte, pemB64 string) {
 	t.Helper()
 
 	switch algoID {
-	case "ecdsa-secp256r1":
+	case algoIDECDSA:
 		priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
 			t.Fatalf("ecdsa.GenerateKey error = %v", err)
@@ -30,7 +36,7 @@ func buildPEMPrivateKey(t *testing.T, algoID string) (cryptoKey interface{}, der
 		}
 		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: derBytes})
 		return priv, derBytes, base64.StdEncoding.EncodeToString(pemBytes)
-	case "eddsa-ed25519":
+	case algoIDEdDSA:
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			t.Fatalf("ed25519.GenerateKey error = %v", err)
@@ -44,16 +50,15 @@ func buildPEMPrivateKey(t *testing.T, algoID string) (cryptoKey interface{}, der
 		return priv, derBytes, base64.StdEncoding.EncodeToString(pemBytes)
 	default:
 		t.Fatalf("unsupported test algo: %s", algoID)
-		return
 	}
+	return nil, nil, ""
 }
 
 // TestNewSecurePrivateKey 验证密钥包装器正确持有私钥引用并复制原始 DER
 func TestNewSecurePrivateKey(t *testing.T) {
-	algoID := "ecdsa-secp256r1"
-	priv, der, _ := buildPEMPrivateKey(t, algoID)
+	priv, der, _ := buildPEMPrivateKey(t, algoIDECDSA)
 
-	spk := NewSecurePrivateKey(priv, der, algoID)
+	spk := NewSecurePrivateKey(priv, der, algoIDECDSA)
 	if spk == nil {
 		t.Fatal("NewSecurePrivateKey returned nil")
 	}
@@ -73,11 +78,10 @@ func TestNewSecurePrivateKey(t *testing.T) {
 
 // TestSecurePrivateKey_Clear_ECDSA 验证 ECDSA 私钥 Clear 后 D 被置零、IsCleared 为 true、二次 Clear 安全
 func TestSecurePrivateKey_Clear_ECDSA(t *testing.T) {
-	algoID := "ecdsa-secp256r1"
-	priv, der, _ := buildPEMPrivateKey(t, algoID)
+	priv, der, _ := buildPEMPrivateKey(t, algoIDECDSA)
 	ecdsaKey := priv.(*ecdsa.PrivateKey)
 
-	spk := NewSecurePrivateKey(priv, der, algoID)
+	spk := NewSecurePrivateKey(priv, der, algoIDECDSA)
 	spk.Clear()
 
 	if !spk.IsCleared() {
@@ -99,14 +103,13 @@ func TestSecurePrivateKey_Clear_ECDSA(t *testing.T) {
 
 // TestSecurePrivateKey_Clear_Ed25519 验证 Ed25519 私钥 Clear 后底层字节被清零
 func TestSecurePrivateKey_Clear_Ed25519(t *testing.T) {
-	algoID := "eddsa-ed25519"
-	priv, der, _ := buildPEMPrivateKey(t, algoID)
+	priv, der, _ := buildPEMPrivateKey(t, algoIDEdDSA)
 	edKey, ok := priv.(ed25519.PrivateKey)
 	if !ok {
 		t.Fatalf("expected ed25519.PrivateKey, got %T", priv)
 	}
 
-	spk := NewSecurePrivateKey(priv, der, algoID)
+	spk := NewSecurePrivateKey(priv, der, algoIDECDSA)
 
 	// 记录 Clear 前的副本以对比
 	before := append([]byte(nil), []byte(edKey)...)

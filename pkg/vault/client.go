@@ -72,7 +72,8 @@ func NewVaultClient(cfg *Cfg) (*VaultClient, error) {
 		httpClient := &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
+					MinVersion: tls.VersionTLS12,
+					RootCAs:    caCertPool,
 				},
 			},
 		}

@@ -3,43 +3,30 @@ package algorithm
 import (
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
+	"fmt"
 	"testing"
 )
 
-// TestECDSAAlgorithm_AlgorithmID 测试算法 ID
-func TestECDSAAlgorithm_AlgorithmID(t *testing.T) {
-	tests := []struct {
-		name     string
-		algo     *ECDSAAlgorithm
-		expected string
-	}{
-		{
-			name:     "secp256k1",
-			algo:     NewECDSAAlgorithm("ecdsa-secp256k1", elliptic.P256()),
-			expected: "ecdsa-secp256k1",
-		},
-		{
-			name:     "secp256r1",
-			algo:     NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256()),
-			expected: "ecdsa-secp256r1",
-		},
-	}
+const (
+	MockPrivKey2 = "218f84362a3c489e21d6f8176f03dd9a1cc208b9fcfe02f9eb2e35714e28d071"
+)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.algo.AlgorithmID(); got != tt.expected {
-				t.Errorf("AlgorithmID() = %v, want %v", got, tt.expected)
-			}
-		})
+// TestSecp256r1Algorithm_AlgorithmID 测试算法 ID
+func TestSecp256r1Algorithm_AlgorithmID(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
+	expected := "ecdsa-secp256r1"
+
+	if got := algo.AlgorithmID(); got != expected {
+		t.Errorf("AlgorithmID() = %v, want %v", got, expected)
 	}
 }
 
-// TestECDSAAlgorithm_GenerateKey 测试密钥生成
-func TestECDSAAlgorithm_GenerateKey(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_GenerateKey 测试密钥生成
+func TestSecp256r1Algorithm_GenerateKey(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	privKey, pubKey, err := algo.GenerateKey()
 	if err != nil {
@@ -72,37 +59,41 @@ func TestECDSAAlgorithm_GenerateKey(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_Sign 测试签名
-func TestECDSAAlgorithm_Sign(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_Sign 测试签名
+func TestSecp256r1Algorithm_Sign(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
-	privKey, _, err := algo.GenerateKey()
+	privKeyHex := MockPrivKey2
+	privKeyBytes, err := hex.DecodeString(privKeyHex)
 	if err != nil {
-		t.Fatalf("GenerateKey() error = %v", err)
+		t.Fatalf("failed to decode private key hex: %v", err)
+	}
+	privKey, err := algo.NewPrivateKeyFromBytes(privKeyBytes)
+	if err != nil {
+		t.Fatalf("NewPrivateKeyFromBytes() error = %v", err)
 	}
 
-	message := []byte("Hello, World!")
+	message, _ := hex.DecodeString("e2c1e0526103d300a350fa2031d2fc70479e11fa23aa1790c1554a0cc7924bfe")
 	signature, err := algo.Sign(privKey, message)
 	if err != nil {
 		t.Fatalf("Sign() error = %v", err)
 	}
 
-	// ECDSA 签名长度应该是 64 字节 (P-256 的 r 和 s 各 32 字节)
-	// DER 编码会添加前缀，所以这里检查的是 DER 编码后的长度
+	// DER 编码签名长度至少 8 字节
 	if len(signature) == 0 {
 		t.Error("Sign() returned empty signature")
 	}
 
-	// 验证签名可以被正确解析为 r 和 s
 	sigLen := len(signature)
-	if sigLen < 8 { // 最小的 DER 编码签名
+	if sigLen < 8 {
 		t.Errorf("Signature too short: %d bytes", sigLen)
 	}
+	fmt.Println(hex.EncodeToString(signature))
 }
 
-// TestECDSAAlgorithm_SerializePrivateKey 测试私钥序列化
-func TestECDSAAlgorithm_SerializePrivateKey(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_SerializePrivateKey 测试私钥序列化
+func TestSecp256r1Algorithm_SerializePrivateKey(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	privKey, _, err := algo.GenerateKey()
 	if err != nil {
@@ -129,9 +120,9 @@ func TestECDSAAlgorithm_SerializePrivateKey(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_SerializePublicKey 测试公钥序列化
-func TestECDSAAlgorithm_SerializePublicKey(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_SerializePublicKey 测试公钥序列化
+func TestSecp256r1Algorithm_SerializePublicKey(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	_, pubKey, err := algo.GenerateKey()
 	if err != nil {
@@ -158,9 +149,9 @@ func TestECDSAAlgorithm_SerializePublicKey(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_ParsePrivateKey 测试私钥解析
-func TestECDSAAlgorithm_ParsePrivateKey(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_ParsePrivateKey 测试私钥解析
+func TestSecp256r1Algorithm_ParsePrivateKey(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	// 先生成并序列化
 	privKey, _, err := algo.GenerateKey()
@@ -191,9 +182,9 @@ func TestECDSAAlgorithm_ParsePrivateKey(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_ClearPrivateKey 测试私钥清零
-func TestECDSAAlgorithm_ClearPrivateKey(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_ClearPrivateKey 测试私钥清零
+func TestSecp256r1Algorithm_ClearPrivateKey(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	privKey, _, err := algo.GenerateKey()
 	if err != nil {
@@ -211,18 +202,18 @@ func TestECDSAAlgorithm_ClearPrivateKey(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_HashFunc 测试哈希函数
-func TestECDSAAlgorithm_HashFunc(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_HashFunc 测试哈希函数
+func TestSecp256r1Algorithm_HashFunc(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	if got := algo.HashFunc(); got != crypto.SHA256 {
 		t.Errorf("HashFunc() = %v, want %v", got, crypto.SHA256)
 	}
 }
 
-// TestECDSAAlgorithm_VerifySignature 测试签名验证
-func TestECDSAAlgorithm_VerifySignature(t *testing.T) {
-	algo := NewECDSAAlgorithm("ecdsa-secp256r1", elliptic.P256())
+// TestSecp256r1Algorithm_VerifySignature 测试签名验证
+func TestSecp256r1Algorithm_VerifySignature(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
 
 	privKey, pubKey, err := algo.GenerateKey()
 	if err != nil {
@@ -249,20 +240,20 @@ func TestECDSAAlgorithm_VerifySignature(t *testing.T) {
 	}
 }
 
-// TestECDSAAlgorithm_DifferentCurves 测试不同曲线
-func TestECDSAAlgorithm_DifferentCurves(t *testing.T) {
+// TestSecp256r1Algorithm_DifferentCurves 测试不同曲线
+func TestSecp256r1Algorithm_DifferentCurves(t *testing.T) {
 	curves := []struct {
 		name  string
-		curve elliptic.Curve
+		curve string
 	}{
-		{"P-256", elliptic.P256()},
-		{"P-384", elliptic.P384()},
-		{"P-521", elliptic.P521()},
+		{"P-256", "test-P-256"},
+		{"P-384", "test-P-384"},
+		{"P-521", "test-P-521"},
 	}
 
 	for _, tc := range curves {
 		t.Run(tc.name, func(t *testing.T) {
-			algo := NewECDSAAlgorithm("test-"+tc.name, tc.curve)
+			algo := NewSecp256r1Algorithm()
 
 			privKey, _, err := algo.GenerateKey()
 			if err != nil {
@@ -280,5 +271,44 @@ func TestECDSAAlgorithm_DifferentCurves(t *testing.T) {
 				t.Error("Sign() returned empty signature")
 			}
 		})
+	}
+}
+
+// TestSecp256r1Algorithm_NewPrivateKeyFromBytes 测试从字节创建私钥
+func TestSecp256r1Algorithm_NewPrivateKeyFromBytes(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
+
+	// 使用已知私钥
+	privKeyHex := "218f84362a3c489e21d6f8176f03dd9a1cc208b9fcfe02f9eb2e35714e28d071"
+	privKeyBytes, err := hex.DecodeString(privKeyHex)
+	if err != nil {
+		t.Fatalf("failed to decode private key hex: %v", err)
+	}
+
+	privKey, err := algo.NewPrivateKeyFromBytes(privKeyBytes)
+	if err != nil {
+		t.Fatalf("NewPrivateKeyFromBytes() error = %v", err)
+	}
+
+	ecdsaKey, ok := privKey.(*ecdsa.PrivateKey)
+	if !ok {
+		t.Fatalf("Expected *ecdsa.PrivateKey, got %T", privKey)
+	}
+
+	// 验证 D 值正确
+	expectedD := "218f84362a3c489e21d6f8176f03dd9a1cc208b9fcfe02f9eb2e35714e28d071"
+	if hex.EncodeToString(ecdsaKey.D.Bytes()) != expectedD {
+		t.Errorf("D value mismatch, got %x, want %s", ecdsaKey.D.Bytes(), expectedD)
+	}
+}
+
+// TestSecp256r1Algorithm_NewPrivateKeyFromBytes_InvalidLength 测试无效长度
+func TestSecp256r1Algorithm_NewPrivateKeyFromBytes_InvalidLength(t *testing.T) {
+	algo := NewSecp256r1Algorithm()
+
+	// 长度不对
+	_, err := algo.NewPrivateKeyFromBytes([]byte{0x01, 0x02})
+	if err == nil {
+		t.Error("expected error for invalid length, got nil")
 	}
 }

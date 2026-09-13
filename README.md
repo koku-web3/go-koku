@@ -205,7 +205,7 @@ service Signer {
 | KeyType | 算法 | 用途 |
 |---------|------|------|
 | `ecdsa-secp256k1` | ECDSA over secp256k1 | 比特币、以太坊等 |
-| `ecdsa-secp256r1` | ECDSA over P-256 | 特定场景 |
+| `ecdsa-p256` | ECDSA over P-256 (NIST P-256) | 特定场景 |
 | `eddsa-ed25519` | Ed25519 | Solana、Near 等 |
 
 ---
@@ -381,9 +381,32 @@ go-koku/
 ### 1. 初始化数据库
 
 ```bash
-# 执行数据库迁移
-mysql -h 127.0.0.1 -u koku -pkoku_pwd koku < migrations/001_create_keys_tables.sql
+# 执行数据库初始化脚本（创建数据库和插入初始数据）
+mysql -h 127.0.0.1 -u koku -pkoku_pwd < scripts/sql/001_init.sql
+
+# 或分步执行：
+mysql -h 127.0.0.1 -u root -proot_pwd < scripts/sql/001_init.sql
 ```
+
+#### 初始化脚本说明 (`scripts/sql/001_init.sql`)
+
+该脚本完成以下操作：
+
+1. **创建数据库**
+   ```sql
+   CREATE DATABASE IF NOT EXISTS kokudb DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci;
+   ```
+
+2. **创建 chains 表**（如果不存在）
+
+3. **插入初始区块链配置数据**
+   - Ethereum Sepolia 测试网：
+     - `chain_code`: ethereum
+     - `base_coin`: eth
+     - `rpc_url`: https://ethereum-sepolia-rpc.publicnode.com
+     - `explorer_url`: https://sepolia.etherscan.io/
+     - `confirmation_count`: 12
+     - `tx_builder_serv_grpc`: http://127.0.0.1:8001
 
 ### 2. 配置 Vault Transit Engine
 

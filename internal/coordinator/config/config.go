@@ -60,14 +60,14 @@ type LogConfig struct {
 
 // Signer grpc地址配置
 type SignerConfig struct {
-	Address   string             `toml:"address"` // Signer gRPC 服务地址，如 "localhost:50051"
-	TLSClient TLSClientSettings  `toml:"tls"`
+	Address   string            `toml:"address"` // Signer gRPC 服务地址，如 "localhost:50051"
+	TLSClient TLSClientSettings `toml:"tls"`
 }
 
 // Key Creator grpc地址配置
 type KeyCreatorConfig struct {
-	Address   string             `toml:"address"` // Key Creator gRPC 服务地址，如 "localhost:50051"
-	TLSClient TLSClientSettings  `toml:"tls"`
+	Address   string            `toml:"address"` // Key Creator gRPC 服务地址，如 "localhost:50051"
+	TLSClient TLSClientSettings `toml:"tls"`
 }
 
 // DBConfig 数据库配置

@@ -127,37 +127,17 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 }
 
 func (c *Client) CreateOperationalKey(ctx context.Context, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, keyType string) (*CreateKeyResult, error) {
-	log.Info("KeyCreatorClient.CreateOperationalKey", "trace_id", traceID, "chain_code", chainCode, "bip44Path", bip44Path, "account_index_start", accountIndexStart, "count", count)
-
-	if traceID == "" {
-		return nil, fmt.Errorf("trace_id is required")
-	}
-	if chainCode == "" {
-		return nil, fmt.Errorf("chain_code is required")
-	}
-	if bip32keyCiphertext == "" {
-		return nil, fmt.Errorf("bip32key_ciphertext is required")
-	}
-
-	resp, err := c.keyCreator.CreateOperationalKey(ctx, &kvgrpc.CreateKeyRequest{
-		TraceId:            traceID,
-		ChainCode:          chainCode,
-		Bip44Path:          bip44Path,
-		AccountIndexStart:  accountIndexStart,
-		Count:              count,
-		Bip32KeyCiphertext: bip32keyCiphertext,
-		KeyType:            keyType,
-	})
-	if err != nil {
-		log.Error("KeyCreatorClient.CreateOperationalKey failed", "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("keycreator CreateOperationalKey failed: %w", err)
-	}
-
-	return parseCreateKeyResponse(resp), nil
+	return c.createKey(ctx, "Operational", c.keyCreator.CreateOperationalKey, traceID, chainCode, bip44Path, accountIndexStart, count, bip32keyCiphertext, keyType)
 }
 
 func (c *Client) CreateUserKey(ctx context.Context, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, keyType string) (*CreateKeyResult, error) {
-	log.Info("KeyCreatorClient.CreateUserKey", "trace_id", traceID, "chain_code", chainCode, "bip44Path", bip44Path, "account_index_start", accountIndexStart, "count", count)
+	return c.createKey(ctx, "User", c.keyCreator.CreateUserKey, traceID, chainCode, bip44Path, accountIndexStart, count, bip32keyCiphertext, keyType)
+}
+
+type createKeyFunc func(context.Context, *kvgrpc.CreateKeyRequest, ...grpc.CallOption) (*kvgrpc.CreateKeyResponse, error)
+
+func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, algoType string) (*CreateKeyResult, error) {
+	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", traceID, "chain_code", chainCode, "bip44Path", bip44Path, "account_index_start", accountIndexStart, "count", count)
 
 	if traceID == "" {
 		return nil, fmt.Errorf("trace_id is required")
@@ -169,18 +149,18 @@ func (c *Client) CreateUserKey(ctx context.Context, traceID, chainCode, bip44Pat
 		return nil, fmt.Errorf("bip32key_ciphertext is required")
 	}
 
-	resp, err := c.keyCreator.CreateUserKey(ctx, &kvgrpc.CreateKeyRequest{
+	resp, err := fn(ctx, &kvgrpc.CreateKeyRequest{
 		TraceId:            traceID,
 		ChainCode:          chainCode,
 		Bip44Path:          bip44Path,
 		AccountIndexStart:  accountIndexStart,
 		Count:              count,
 		Bip32KeyCiphertext: bip32keyCiphertext,
-		KeyType:            keyType,
+		KeyType:            algoType,
 	})
 	if err != nil {
-		log.Error("KeyCreatorClient.CreateUserKey failed", "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("keycreator CreateUserKey failed: %w", err)
+		log.Error(fmt.Sprintf("KeyCreatorClient.Create%sKey failed", keyType), "error", err, "trace_id", traceID)
+		return nil, fmt.Errorf("keycreator Create%sKey failed: %w", keyType, err)
 	}
 
 	return parseCreateKeyResponse(resp), nil

@@ -282,7 +282,11 @@ func TestMTLSHandshake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
-	defer ln.Close()
+	defer func() {
+		if err := ln.Close(); err != nil {
+			t.Logf("failed to close listener: %v", err)
+		}
+	}()
 
 	const testMsg = "hello-mtls"
 	var wg sync.WaitGroup
@@ -297,9 +301,12 @@ func TestMTLSHandshake(t *testing.T) {
 			serverErr = fmt.Errorf("accept failed: %w", err)
 			return
 		}
-		defer conn.Close()
 		tlsConn := tls.Server(conn, srvTLS)
-		defer tlsConn.Close()
+		defer func() {
+			if err := tlsConn.Close(); err != nil {
+				serverErr = fmt.Errorf("tls conn close: %w", err)
+			}
+		}()
 		if err := tlsConn.Handshake(); err != nil {
 			serverErr = fmt.Errorf("server handshake failed: %w", err)
 			return
@@ -310,7 +317,10 @@ func TestMTLSHandshake(t *testing.T) {
 			serverErr = fmt.Errorf("expected %q, got %q", testMsg, string(buf[:n]))
 			return
 		}
-		tlsConn.Write([]byte("ok"))
+		if _, err := tlsConn.Write([]byte("ok")); err != nil {
+			serverErr = fmt.Errorf("write failed: %w", err)
+			return
+		}
 	}()
 
 	// Client goroutine
@@ -322,14 +332,20 @@ func TestMTLSHandshake(t *testing.T) {
 			clientErr = fmt.Errorf("dial failed: %w", err)
 			return
 		}
-		defer conn.Close()
 		tlsConn := tls.Client(conn, cliTLS)
-		defer tlsConn.Close()
+		defer func() {
+			if err := tlsConn.Close(); err != nil {
+				clientErr = fmt.Errorf("tls conn close: %w", err)
+			}
+		}()
 		if err := tlsConn.Handshake(); err != nil {
 			clientErr = fmt.Errorf("client handshake failed: %w", err)
 			return
 		}
-		tlsConn.Write([]byte(testMsg))
+		if _, err := tlsConn.Write([]byte(testMsg)); err != nil {
+			clientErr = fmt.Errorf("write failed: %w", err)
+			return
+		}
 		buf := make([]byte, 1024)
 		n, _ := tlsConn.Read(buf)
 		if string(buf[:n]) != "ok" {

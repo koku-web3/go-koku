@@ -40,6 +40,89 @@ type UniversalTransferResult struct {
 	TxID string
 }
 
+// verifyAddresses 验证 from 和 to 地址的有效性
+func (s *transferServiceImpl) verifyAddresses(ctx context.Context, in *UniversalTransferInput) error {
+	verifyR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
+		TraceId: in.TraceID,
+		Address: in.FromAddress,
+	}, in.ChainCode)
+	if err != nil || !verifyR.IsValid {
+		return fmt.Errorf("%w: verify from_address failed: %s", ErrNetwork, err)
+	}
+
+	verifyToR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
+		TraceId: in.TraceID,
+		Address: in.ToAddress,
+	}, in.ChainCode)
+	if err != nil || !verifyToR.IsValid {
+		return fmt.Errorf("%w: verify to_address failed: %s", ErrNetwork, err)
+	}
+
+	return nil
+}
+
+// verifyContract 验证合约地址（如果适用）
+func (s *transferServiceImpl) verifyContract(ctx context.Context, in *UniversalTransferInput) error {
+	if !in.IsBasicCoin && in.Contract != "" {
+		contractR, err := s.txCli.VerifyContractAddress(ctx, &tbproto.VerifyContractAddressRequest{
+			TraceId: in.TraceID,
+			Address: in.Contract,
+		}, in.ChainCode)
+		if err != nil || !contractR.IsValid {
+			return fmt.Errorf("%w: verify contract address failed: %s", ErrNetwork, err)
+		}
+	}
+	return nil
+}
+
+// checkBalance 验证余额是否充足
+func (s *transferServiceImpl) checkBalance(ctx context.Context, in *UniversalTransferInput) error {
+	balanceR, err := s.txCli.CheckSufficientBalance(ctx, &tbproto.CheckSufficientBalanceRequest{
+		TraceId:     in.TraceID,
+		ChainCode:   in.ChainCode,
+		Coin:        in.Coin,
+		IsBasicCoin: in.IsBasicCoin,
+		FromAddress: in.FromAddress,
+		Amount:      in.Amount,
+		Contract:    in.Contract,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: check sufficient balance failed: %s", ErrNetwork, err)
+	}
+	if (!in.IsBasicCoin && !balanceR.IsTokenSufficient) || (in.IsBasicCoin && !balanceR.IsCoinSufficient) {
+		return fmt.Errorf("%w: insufficient balance", ErrInsufficientBalance)
+	}
+	return nil
+}
+
+// signAndBroadcast 执行签名和广播交易
+func (s *transferServiceImpl) signAndBroadcast(ctx context.Context, in *UniversalTransferInput, key *model.ChindKey, rawDataR *tbproto.BuildSignRawDataResponse) (string, error) {
+	var sigResult *signer.SignResult
+	var err error
+	if in.KeyUsage == 0 {
+		sigResult, err = s.signer.SignAcct0(ctx, in.TraceID, in.ChainCode, key.BIP44Path, "", rawDataR.Msg, key.Ciphertext)
+	} else {
+		sigResult, err = s.signer.SignAcct1(ctx, in.TraceID, in.ChainCode, key.BIP44Path, "", rawDataR.Msg, key.Ciphertext)
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: sign failed: %s", ErrSignFailed, err)
+	}
+
+	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{
+		TraceId:   in.TraceID,
+		RawData:   rawDataR.RawData,
+		Signature: sigResult.Signature,
+	}, in.ChainCode)
+	if err != nil {
+		return "", fmt.Errorf("%w: broadcast failed: %s", ErrBroadcastFailed, err)
+	}
+	if !broadcastR.Success {
+		return "", fmt.Errorf("%w: broadcast returned failure", ErrBroadcastFailed)
+	}
+
+	return in.TraceID, nil
+}
+
 func (s *transferServiceImpl) UniversalTransfer(ctx context.Context, in *UniversalTransferInput) (*UniversalTransferResult, error) {
 	if err := s.validateInput(in); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidParam, err)
@@ -53,46 +136,16 @@ func (s *transferServiceImpl) UniversalTransfer(ctx context.Context, in *Univers
 		return nil, fmt.Errorf("%w: key not found for address %s", ErrKeyNotFound, in.FromAddress)
 	}
 
-	verifyR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
-		TraceId: in.TraceID,
-		Address: in.FromAddress,
-	}, in.ChainCode)
-	if err != nil || !verifyR.IsValid {
-		return nil, fmt.Errorf("%w: verify from_address failed: %s", ErrNetwork, err)
+	if err := s.verifyAddresses(ctx, in); err != nil {
+		return nil, err
 	}
 
-	verifyToR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
-		TraceId: in.TraceID,
-		Address: in.ToAddress,
-	}, in.ChainCode)
-	if err != nil || !verifyToR.IsValid {
-		return nil, fmt.Errorf("%w: verify to_address failed: %s", ErrNetwork, err)
+	if err := s.verifyContract(ctx, in); err != nil {
+		return nil, err
 	}
 
-	if !in.IsBasicCoin && in.Contract != "" {
-		contractR, err := s.txCli.VerifyContractAddress(ctx, &tbproto.VerifyContractAddressRequest{
-			TraceId: in.TraceID,
-			Address: in.Contract,
-		}, in.ChainCode)
-		if err != nil || !contractR.IsValid {
-			return nil, fmt.Errorf("%w: verify contract address failed: %s", ErrNetwork, err)
-		}
-	}
-
-	balanceR, err := s.txCli.CheckSufficientBalance(ctx, &tbproto.CheckSufficientBalanceRequest{
-		TraceId:     in.TraceID,
-		ChainCode:   in.ChainCode,
-		Coin:        in.Coin,
-		IsBasicCoin: in.IsBasicCoin,
-		FromAddress: in.FromAddress,
-		Amount:      in.Amount,
-		Contract:    in.Contract,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: check sufficient balance failed: %s", ErrNetwork, err)
-	}
-	if (!in.IsBasicCoin && !balanceR.IsTokenSufficient) || (in.IsBasicCoin && !balanceR.IsCoinSufficient) {
-		return nil, fmt.Errorf("%w: insufficient balance", ErrInsufficientBalance)
+	if err := s.checkBalance(ctx, in); err != nil {
+		return nil, err
 	}
 
 	rawDataR, err := s.txCli.BuildSignRawData(ctx, &tbproto.BuildSignRawDataRequest{
@@ -110,29 +163,11 @@ func (s *transferServiceImpl) UniversalTransfer(ctx context.Context, in *Univers
 		return nil, fmt.Errorf("%w: build sign raw data failed: %s", ErrSignFailed, err)
 	}
 
-	var sigResult *signer.SignResult
-	if in.KeyUsage == 0 {
-		sigResult, err = s.signer.SignAcct0(ctx, in.TraceID, in.ChainCode, key.BIP44Path, "", rawDataR.Msg, key.Ciphertext)
-	} else {
-		sigResult, err = s.signer.SignAcct1(ctx, in.TraceID, in.ChainCode, key.BIP44Path, "", rawDataR.Msg, key.Ciphertext)
-	}
+	txId, err := s.signAndBroadcast(ctx, in, key, rawDataR)
 	if err != nil {
-		return nil, fmt.Errorf("%w: sign failed: %s", ErrSignFailed, err)
+		return nil, err
 	}
 
-	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{
-		TraceId:   in.TraceID,
-		RawData:   rawDataR.RawData,
-		Signature: sigResult.Signature,
-	}, in.ChainCode)
-	if err != nil {
-		return nil, fmt.Errorf("%w: broadcast failed: %s", ErrBroadcastFailed, err)
-	}
-	if !broadcastR.Success {
-		return nil, fmt.Errorf("%w: broadcast returned failure", ErrBroadcastFailed)
-	}
-
-	txId := in.TraceID
 	s.writeAuditLog(ctx, in, key.ID, txId, "SUCCESS")
 
 	return &UniversalTransferResult{TxID: txId}, nil

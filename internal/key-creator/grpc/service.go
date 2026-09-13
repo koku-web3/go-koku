@@ -102,37 +102,7 @@ func (s *KeyCreatorService) Genesis(ctx context.Context, req *proto.GenesisReque
 //  3. 根据密钥类型获取对应的算法服务
 //  4. 派生子密钥
 func (s *KeyCreatorService) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
-	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "address_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext length", len(req.Bip32KeyCiphertext))
-
-	// 入参校验
-	if err := validateCreateKeyRequest(req); err != nil {
-		log.Error("CreateKey validation failed", "error", err, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	// 检查 bip44Path 的 Account 是否运营账号
-	usage, err := findUsage(req.Bip44Path)
-	if err != nil {
-		log.Error("failed to resolve bip44Path's account", "error", err, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("invalid bip44Path: %w", err)
-	}
-	if usage != keyutil.KEY_USAGE_OPERATIONAL {
-		log.Error("Invalid bip44Path's account", "account", usage, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("Unsupported bip44Path(account=%d) in this API", usage)
-	}
-
-	// 获取算法实现
-	algo, err := algorithm.Get(req.KeyType)
-	if err != nil {
-		log.Error("Unsupported key type", "key_type", req.KeyType, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("unsupported key type: %s", req.KeyType)
-	}
-
-	res, err := s.deriveFifthDepthChildKeys(req, transit.OperationsTransit, transit.GetKeyNameForOperations(req.ChainCode), transit.Bip44PathToContext(req.Bip44Path), algo)
-	if err != nil {
-		return nil, fmt.Errorf("trace_id=%s %w", req.TraceId, err)
-	}
-	return res, nil
+	return s.createDerivedKeys(ctx, req, keyutil.KEY_USAGE_OPERATIONAL, transit.OperationsTransit, transit.GetKeyNameForOperations)
 }
 
 // CreateUserKey 从指定 bip32.key 类型密钥派生子密钥
@@ -142,6 +112,12 @@ func (s *KeyCreatorService) CreateOperationalKey(ctx context.Context, req *proto
 //  3. 根据密钥类型获取对应的算法服务
 //  4. 派生子密钥
 func (s *KeyCreatorService) CreateUserKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
+	return s.createDerivedKeys(ctx, req, keyutil.KEY_USAGE_USER, transit.UserTransit, transit.GetKeyNameForUser)
+}
+
+type keyNameFunc func(string) string
+
+func (s *KeyCreatorService) createDerivedKeys(ctx context.Context, req *proto.CreateKeyRequest, expectedUsage keyutil.AccountUsage, transitName string, getKeyName keyNameFunc) (*proto.CreateKeyResponse, error) {
 	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "address_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext length", len(req.Bip32KeyCiphertext))
 
 	// 入参校验
@@ -150,13 +126,13 @@ func (s *KeyCreatorService) CreateUserKey(ctx context.Context, req *proto.Create
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	// 检查 bip44Path 的 Account 是否 "用户" 账号
+	// 检查 bip44Path 的 Account 是否匹配预期用途
 	usage, err := findUsage(req.Bip44Path)
 	if err != nil {
 		log.Error("failed to resolve bip44Path's account", "error", err, "trace_id", req.TraceId)
 		return nil, fmt.Errorf("invalid bip44Path: %w", err)
 	}
-	if usage != keyutil.KEY_USAGE_USER {
+	if usage != expectedUsage {
 		log.Error("Invalid bip44Path's account", "account", usage, "trace_id", req.TraceId)
 		return nil, fmt.Errorf("Unsupported bip44Path(account=%d) in this API", usage)
 	}
@@ -168,7 +144,7 @@ func (s *KeyCreatorService) CreateUserKey(ctx context.Context, req *proto.Create
 		return nil, fmt.Errorf("unsupported key type: %s", req.KeyType)
 	}
 
-	res, err := s.deriveFifthDepthChildKeys(req, transit.UserTransit, transit.GetKeyNameForUser(req.ChainCode), transit.Bip44PathToContext(req.Bip44Path), algo)
+	res, err := s.deriveFifthDepthChildKeys(req, transitName, getKeyName(req.ChainCode), transit.Bip44PathToContext(req.Bip44Path), algo)
 	if err != nil {
 		return nil, fmt.Errorf("trace_id=%s %w", req.TraceId, err)
 	}

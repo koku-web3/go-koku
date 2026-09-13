@@ -39,6 +39,7 @@ func LoadServerConfig(cfg ServerConfig) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{cert},
 		ClientCAs:    roots,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -60,6 +61,7 @@ func LoadClientConfig(cfg ClientConfig) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      roots,
 		ServerName:   cfg.ServerName,

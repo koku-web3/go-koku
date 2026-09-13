@@ -76,33 +76,19 @@ func (s *SignerService) StopWhenCancelled(ctx context.Context) {
 // 使用 BIP44 路径 Account=0(运营密钥) 的子密钥签名消息
 // 场景：归集、出账
 func (s *SignerService) SignAcct0(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
-	log.Info("Sign called",
-		"trace_id", req.TraceId,
-		"chain_code", req.ChainCode,
-		"key_type", req.KeyType,
-		"bip44_path", req.Bip44Path,
-		"message_len", len(req.Message),
-		"priv_key_ciphertext_len", len(req.PrivKeyCiphertext))
-
-	// 入参校验
-	if err := validateSignRequest(req); err != nil {
-		log.Error("Sign validation failed", "error", err, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("invalid request: %w", err)
-	}
-
-	res, err := s.sign(transit.OperationsTransit, transit.GetKeyNameForOperations(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext)
-	if err != nil {
-		return nil, fmt.Errorf("trace_id=%s, sign failed: %w", req.TraceId, err)
-	}
-	log.Info("Sign succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "signature", res.Signature)
-
-	return res, nil
+	return s.signMessage(req, transit.OperationsTransit, transit.GetKeyNameForOperations, "SignAcct0")
 }
 
 // 使用 BIP44 路径 Account=1(用户密钥) 的子密钥签名消息
 // 场景：归集
 func (s *SignerService) SignAcct1(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
-	log.Info("Sign called",
+	return s.signMessage(req, transit.UserTransit, transit.GetKeyNameForUser, "SignAcct1")
+}
+
+type transitKeyNameFunc func(string) string
+
+func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, getKeyName transitKeyNameFunc, methodName string) (*proto.SignResponse, error) {
+	log.Info(methodName+" called",
 		"trace_id", req.TraceId,
 		"chain_code", req.ChainCode,
 		"key_type", req.KeyType,
@@ -116,11 +102,11 @@ func (s *SignerService) SignAcct1(ctx context.Context, req *proto.SignRequest) (
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	res, err := s.sign(transit.UserTransit, transit.GetKeyNameForUser(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext)
+	res, err := s.sign(transitName, getKeyName(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext)
 	if err != nil {
 		return nil, fmt.Errorf("trace_id=%s, sign failed: %w", req.TraceId, err)
 	}
-	log.Info("Sign succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "signature", res.Signature)
+	log.Info(methodName+" succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "signature", res.Signature)
 
 	return res, nil
 }

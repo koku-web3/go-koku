@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1: Build all 3 Go binaries
 # =============================================================================
-FROM --platform=linux/amd64 golang:1.27-alpine AS builder
+FROM --platform=linux/amd64 golang:1.26-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates

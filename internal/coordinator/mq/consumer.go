@@ -43,7 +43,9 @@ func NewConsumer(ctx context.Context, cfg config.MQConfig, transferSvc service.T
 		cfg.PrefetchCount,
 	)
 	if err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Error("failed to close connection", "error", closeErr)
+		}
 		return nil, fmt.Errorf("create consumer for %s: %w", cfg.QueueAcct0, err)
 	}
 
@@ -58,7 +60,9 @@ func NewConsumer(ctx context.Context, cfg config.MQConfig, transferSvc service.T
 	)
 	if err != nil {
 		ac0.Close()
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Error("failed to close connection", "error", closeErr)
+		}
 		return nil, fmt.Errorf("create consumer for %s: %w", cfg.QueueAcct1, err)
 	}
 
@@ -111,7 +115,9 @@ func (c *Consumer) RunForever() error {
 
 	c.stopWg.Wait()
 
-	c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		log.Error("failed to close connection", "error", err)
+	}
 	log.Info("MQ Consumer stopped")
 	return nil
 }
@@ -134,7 +140,9 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		if err != nil {
 			log.Error("parse msg failed, reject without requeue",
 				"queue", queueName, "error", err)
-			d.Nack(false, false)
+			if nackErr := d.Nack(false, false); nackErr != nil {
+				log.Error("failed to nack message", "error", nackErr)
+			}
 			return rabbitmq.NackDiscard
 		}
 
@@ -149,7 +157,9 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		elapsed := time.Since(start)
 
 		if err == nil {
-			d.Ack(false)
+			if ackErr := d.Ack(false); ackErr != nil {
+				log.Error("failed to ack message", "error", ackErr)
+			}
 			log.Info("msg processed successfully",
 				"trace_id", msg.TraceID, "biz_id", msg.BizID,
 				"chain_code", msg.ChainCode, "queue", queueName,
@@ -158,7 +168,9 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		}
 
 		if IsPermanent(err) {
-			d.Nack(false, false)
+			if nackErr := d.Nack(false, false); nackErr != nil {
+				log.Error("failed to nack message", "error", nackErr)
+			}
 			log.Error("msg processed failed (permanent), reject without requeue",
 				"trace_id", msg.TraceID, "biz_id", msg.BizID,
 				"queue", queueName, "error", err,
@@ -166,7 +178,9 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 			return rabbitmq.NackDiscard
 		}
 
-		d.Nack(false, true)
+		if nackErr := d.Nack(false, true); nackErr != nil {
+			log.Error("failed to nack message", "error", nackErr)
+		}
 		log.Error("msg processed failed (transient), requeue for retry",
 			"trace_id", msg.TraceID, "biz_id", msg.BizID,
 			"queue", queueName, "error", err,
