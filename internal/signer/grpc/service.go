@@ -93,7 +93,7 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 		"chain_code", req.ChainCode,
 		"key_type", req.KeyType,
 		"bip44_path", req.Bip44Path,
-		"message_len", len(req.Message),
+		"message", req.Message,
 		"priv_key_ciphertext_len", len(req.PrivKeyCiphertext))
 
 	// 入参校验
@@ -123,6 +123,11 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 // - 签名完成后立即清零
 // - 所有签名操作都会记录到审计日志
 func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, privKeyCiphertext string) (*proto.SignResponse, error) {
+	msgBytes, err := hex.DecodeString(message)
+	if err != nil {
+		return nil, fmt.Errorf("decode hex message from string to bytes failed: %s", err.Error())
+	}
+
 	// 获取算法实现
 	algo, err := algorithm.Get(keyType)
 	if err != nil {
@@ -148,7 +153,7 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 	// 清零私钥
 	defer algo.ClearPrivateKey(privateKey)
 
-	signature, err := algo.Sign(privateKey, []byte(message))
+	signature, err := algo.Sign(privateKey, msgBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign message: %w", err)
 	}

@@ -30,5 +30,5 @@ max_backups = 10
 max_age = 30
 compress = true
 format = "terminal"
-verbosity = 3
+verbosity = 5
 vmodule = ""

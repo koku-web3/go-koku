@@ -3,14 +3,11 @@ package txbuilder
 import (
 	"context"
 	"sync"
-	"time"
 
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	txbuildergrpc "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 )
 
 type ChainClient struct {
@@ -25,16 +22,8 @@ type ChainClient struct {
 }
 
 func newChainClient(chainCode string, addr string, cfg Config) (*ChainClient, error) {
-	keepaliveParams := keepalive.ClientParameters{
-		Time:                time.Duration(cfg.KeepaliveTime) * time.Second,
-		Timeout:             time.Duration(cfg.KeepaliveTimeout) * time.Second,
-		PermitWithoutStream: cfg.PermitWithoutStream,
-	}
 	var dialOpts []grpc.DialOption
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if cfg.KeepaliveTime > 0 {
-		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(keepaliveParams))
-	}
 
 	conn, err := grpc.NewClient(addr, dialOpts...)
 	if err != nil {
@@ -49,28 +38,8 @@ func newChainClient(chainCode string, addr string, cfg Config) (*ChainClient, er
 		breaker:   NewCircuitBreaker(cfg.CircuitBreakerThreshold, cfg.CircuitBreakerWindow),
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.DialTimeout)*time.Second)
-	defer cancel()
-	if err := cc.waitReady(ctx); err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-
-	log.Info("ChainClient: connected", "chain", chainCode, "addr", addr)
+	log.Info("ChainClient connected", "chain", chainCode, "addr", addr)
 	return cc, nil
-}
-
-func (cc *ChainClient) waitReady(ctx context.Context) error {
-	if cc.conn.GetState() == connectivity.Ready {
-		return nil
-	}
-	if !cc.conn.WaitForStateChange(ctx, cc.conn.GetState()) {
-		return ctx.Err()
-	}
-	if cc.conn.GetState() != connectivity.Ready {
-		return context.DeadlineExceeded
-	}
-	return nil
 }
 
 func (cc *ChainClient) GetClient() (txbuildergrpc.TxBuilderClient, error) {

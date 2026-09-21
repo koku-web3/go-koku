@@ -6,18 +6,20 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/koku-web3/go-koku/internal/coordinator/key"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
-	"github.com/koku-web3/go-koku/internal/coordinator/service"
+	"github.com/koku-web3/go-koku/internal/coordinator/tx"
+	"github.com/koku-web3/go-koku/internal/coordinator/types"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 )
 
 type Handler struct {
-	transferSvc service.TransferService
-	repo        repository.KeyRepository
+	transfer tx.TransferManager
+	repo     repository.KeyRepository
 }
 
-func NewHandler(transferSvc service.TransferService, repo repository.KeyRepository) *Handler {
-	return &Handler{transferSvc: transferSvc, repo: repo}
+func NewHandler(transferMgr tx.TransferManager, repo repository.KeyRepository) *Handler {
+	return &Handler{transfer: transferMgr, repo: repo}
 }
 
 type UniversalTransferMsg struct {
@@ -53,12 +55,11 @@ func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalT
 		return NewPermanentErrorFromError(err)
 	}
 
-	result, err := h.transferSvc.UniversalTransfer(ctx, &service.UniversalTransferInput{
+	result, err := h.transfer.UniversalTransfer(ctx, &types.UniversalTransferInput{
 		BizID:       msg.BizID,
 		TraceID:     msg.TraceID,
 		ChainCode:   msg.ChainCode,
 		Coin:        msg.Coin,
-		IsBasicCoin: msg.IsBasicCoin,
 		FromAddress: msg.FromAddress,
 		ToAddress:   msg.ToAddress,
 		Amount:      msg.Amount,
@@ -67,14 +68,16 @@ func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalT
 	})
 
 	if err == nil {
-		log.Info("UniversalTransferCallback", "biz_id", msg.BizID, "tx_id", result.TxID)
+		log.Info("UniversalTransferCallback", "success", true, "biz_id", msg.BizID, "tract_id", msg.TraceID, "tx_hash", result.TxHash)
 		return nil
+	} else {
+		log.Info("UniversalTransferCallback", "success", false, "biz_id", msg.BizID, "tract_id", msg.TraceID, "error", err.Error())
 	}
 
-	if errors.Is(err, service.ErrInvalidParam) ||
-		errors.Is(err, service.ErrKeyNotFound) ||
-		errors.Is(err, service.ErrInsufficientBalance) ||
-		errors.Is(err, service.ErrGenesisExists) {
+	if errors.Is(err, key.ErrInvalidParam) ||
+		errors.Is(err, key.ErrKeyNotFound) ||
+		errors.Is(err, key.ErrInsufficientBalance) ||
+		errors.Is(err, key.ErrGenesisExists) {
 		return NewPermanentErrorFromError(err)
 	}
 

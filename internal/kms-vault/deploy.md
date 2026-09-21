@@ -114,6 +114,7 @@ done
 ```
 
 
+
 ### 4. 检查节点 1 状态，确认 Sealed=false、HA Enabled=true
 
 ```bash
@@ -201,11 +202,11 @@ prod-vault-3   prod-vault-3:8201        follower    true
 
 `State` 一个为 `leader`，另外两个为 `follower`；`Voter` 均为 `true`。
 
-
 ### 7. 初始化三个 transit
+
 使用 Root Token 执行命令，token 只提供给这次命令执行环境，命令结束，环境变量消失。
 
-``` bash
+```bash
 # 初始化 core operations user 密钥引擎
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=transit/core transit
@@ -213,13 +214,15 @@ docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=tran
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=transit/user transit
 ```
 
+
+
 ### 8. 新建策略文件
+
 注意：加密、解密、轮换密钥等操作都依赖 update 能力。
 
->`delete`权限绝对不能给与。
+> `delete`权限绝对不能给与。
 
 策略文件已保存在`./vault-deploy/local-config/policy/`目录下。
-
 
 ```bash
 # key creator 策略
@@ -251,34 +254,45 @@ path "transit/user/*" {
 ' 
 ```
 
+
+
 ### 9. 写入策略
 
-``` bash
+```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault policy write keycreator /vault/config/policy/keycreator.hcl
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault policy write signer /vault/config/policy/signer.hcl
 ```
 
 查看已写入策略
+
 ```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault policy list
 ```
 
+
+
 ### 10. 启用 AWS auth method
-``` bash
+
+```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault auth enable aws
 ```
 
 验证是否生效：执行以下命令，看到列表`Path`存在`aws`
+
 ```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault auth list
 ```
 
+
+
 ### 10. 配置 AWS 客户端凭证
+
 `access_key`和`secret_key`用于让 Vault 的 AWS Auth Method 与 AWS 建立信任。这一步与`keycreator`和`signer`权限无关，只是为了能与 AWS 信任通信做准备。
+
 ```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/config/client \
@@ -286,7 +300,7 @@ docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/config/cli
     secret_key="jdfZdKZbEHY+DqeYxOioRlRig1veHlcBF/+alWiN"
 ```
 
-``` bash
+```bash
 # 设置 STS 端点，在于 AWS 进行验证时指定区域和地址
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/config/client \
@@ -295,14 +309,17 @@ docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/config/cli
 ```
 
 验证是否生效：
+
 ```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/config/client
 ```
 
-### 11. 创建 Vault Role并绑定到AWS IAM Role
-这一步才是配置`keycreator`和`signer`的权限。
 
+
+### 11. 创建 Vault Role并绑定到AWS IAM Role
+
+这一步才是配置`keycreator`和`signer`的权限。
 
 ```bash
 # 创建 Vault Role (role-key-creator) 并绑定到AWS IAM Role（vault@create-key-role）同时赋予`keycreator`策略
@@ -323,6 +340,7 @@ docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/role/role-
 ```
 
 验证是否生效
+
 ```bash
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/role/role-key-creator
@@ -331,11 +349,13 @@ token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq
 docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/role/role-signer
 ```
 
+
+
 ### 12. 关闭宿主机 SWAP
 
 > **为什么必须关闭宿主机 swap？**
 
-Vault 使用 `mlock()` 系统调用锁定内存，防止敏感数据（如 unseal key、root token、Transit 解密明文）被换出到 swap。**但是本项目使用的是集成存储（Raft + BoltDB），因此 `vault-N.hcl` 中设置了 `disable_mlock = true`**（这也是 HashiCorp 官方对集成存储场景的**明确推荐**，因为 BoltDB 的内存映射文件与 `mlock` 冲突，开启 mlock 会导致整个数据集被强制加载到物理内存，容易触发 OOM）。
+Vault 使用 `mlock()` 系统调用锁定内存，防止敏感数据（如 unseal key、root token、Transit 解密明文）被换出到 swap。**但是本项目使用的是集成存储（Raft + BoltDB），因此** `vault-N.hcl` **中设置了** `disable_mlock = true`（这也是 HashiCorp 官方对集成存储场景的**明确推荐**，因为 BoltDB 的内存映射文件与 `mlock` 冲突，开启 mlock 会导致整个数据集被强制加载到物理内存，容易触发 OOM）。
 
 `disable_mlock = true` 意味着 Vault **放弃了内存锁定**，此时如果宿主机 swap 开启，内核在内存压力下会**主动把 Vault 进程内存页换出到 swap 磁盘**。攻击者如果拿到宿主机 root 权限（或通过容器逃逸拿到宿主机访问权限），就可以通过读取 swap 文件/分区，恢复出可能包含密钥明文的内存数据。
 

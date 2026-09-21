@@ -159,8 +159,8 @@ func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc
 		KeyType:            algoType,
 	})
 	if err != nil {
-		log.Error(fmt.Sprintf("KeyCreatorClient.Create%sKey failed", keyType), "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("keycreator Create%sKey failed: %w", keyType, err)
+		log.Error(fmt.Sprintf("call key-creator server to creator %s Key failed", keyType), "error", err, "trace_id", traceID)
+		return nil, fmt.Errorf("call key-creator server to Create%sKey failed: %w", keyType, err)
 	}
 
 	return parseCreateKeyResponse(resp), nil

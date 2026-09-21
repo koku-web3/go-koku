@@ -8,7 +8,7 @@ import (
 
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
-	"github.com/koku-web3/go-koku/internal/coordinator/service"
+	"github.com/koku-web3/go-koku/internal/coordinator/tx"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	"github.com/wagslane/go-rabbitmq"
 )
@@ -24,7 +24,7 @@ type Consumer struct {
 	stopWg        sync.WaitGroup
 }
 
-func NewConsumer(ctx context.Context, cfg config.MQConfig, transferSvc service.TransferService, repo repository.KeyRepository) (*Consumer, error) {
+func NewConsumer(ctx context.Context, cfg config.MQConfig, transferMgr tx.TransferManager, repo repository.KeyRepository) (*Consumer, error) {
 	conn, err := rabbitmq.NewConn(
 		cfg.URL,
 		rabbitmq.WithConnectionOptionsLogging,
@@ -71,7 +71,7 @@ func NewConsumer(ctx context.Context, cfg config.MQConfig, transferSvc service.T
 		conn:          conn,
 		acct0Consumer: ac0,
 		acct1Consumer: ac1,
-		handler:       NewHandler(transferSvc, repo),
+		handler:       NewHandler(transferMgr, repo),
 		ctx:           ctx,
 		stop:          make(chan struct{}),
 	}, nil

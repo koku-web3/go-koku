@@ -7,8 +7,9 @@ import (
 	"net"
 
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
+	"github.com/koku-web3/go-koku/internal/coordinator/key"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
-	"github.com/koku-web3/go-koku/internal/coordinator/service"
+	"github.com/koku-web3/go-koku/internal/coordinator/types"
 	"github.com/koku-web3/go-koku/pkg/keyutil"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	proto "github.com/koku-web3/go-koku/pkg/proto/coordinator"
@@ -21,14 +22,14 @@ import (
 type Server struct {
 	proto.UnimplementedCoordinatorServer
 	repo    repository.KeyRepository
-	keySvc  service.KeyService
+	keySvc  key.KeyManager
 	grpcSrv *grpc.Server
 	host    string
 	port    int
 	tlsCfg  *tls.Config
 }
 
-func NewServer(cfg *config.Config, keySvc service.KeyService, repo repository.KeyRepository, tlsCfg *tls.Config) *Server {
+func NewServer(cfg *config.Config, keySvc key.KeyManager, repo repository.KeyRepository, tlsCfg *tls.Config) *Server {
 	return &Server{
 		repo:   repo,
 		keySvc: keySvc,
@@ -73,7 +74,7 @@ func (s *Server) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest)
 func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
 	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode, "keyType", req.KeyType)
 
-	err := s.keySvc.Genesis(ctx, &service.GenesisInput{
+	err := s.keySvc.Genesis(ctx, &types.GenesisInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
 		KeyType:   req.KeyType,
@@ -84,16 +85,23 @@ func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto
 }
 
 func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
-	log.Info("CreateOperationalKey", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
+	log.Info("CreateOperationalKey ready", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
 
-	result, err := s.keySvc.CreateKey(ctx, &service.CreateKeyInput{
+	log.Info("CreateOperationalKey -> CreateKey", "trace_id", req.TraceId)
+
+	result, err := s.keySvc.CreateKey(ctx, &types.CreateKeyInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
 		Usage:     keyutil.KEY_USAGE_OPERATIONAL,
 		Count:     req.Count,
 	})
+	if err != nil {
+		log.Error("CreateOperationalKey failed", "trace_id", req.TraceId, "error", err.Error())
+	} else {
+		log.Info("CreateOperationalKey success", "trace_id", req.TraceId)
+		log.Debug("CreateOperationalKey response", "trace_id", req.TraceId, "address_list", result)
+	}
 
-	log.Info("CreateOperationalKey completed", "result", result, "error", err)
 	return &proto.CreateKeyResponse{
 		Success:     err == nil,
 		AddressList: result,
@@ -103,7 +111,7 @@ func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyR
 func (s *Server) CreateUserKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
 	log.Info("CreateUserKey", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
 
-	result, err := s.keySvc.CreateKey(ctx, &service.CreateKeyInput{
+	result, err := s.keySvc.CreateKey(ctx, &types.CreateKeyInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
 		Usage:     keyutil.KEY_USAGE_USER,
@@ -120,7 +128,7 @@ func (s *Server) CreateUserKey(ctx context.Context, req *proto.CreateKeyRequest)
 func (s *Server) VerifyAddress(ctx context.Context, req *proto.VerifyAddressRequest) (*proto.VerifyAddressResponse, error) {
 	log.Info("VerifyAddress", "trace_id", req.TraceId, "chain_code", req.ChainCode, "address", req.Address)
 
-	valid, err := s.keySvc.VerifyAddress(ctx, &service.VerifyAddressInput{
+	valid, err := s.keySvc.VerifyAddress(ctx, &types.VerifyAddressInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
 		Address:   req.Address,
@@ -136,7 +144,7 @@ func (s *Server) VerifyAddress(ctx context.Context, req *proto.VerifyAddressRequ
 func (s *Server) VerifyContractAddress(ctx context.Context, req *proto.VerifyContractAddressRequest) (*proto.VerifyContractAddressResponse, error) {
 	log.Info("VerifyContractAddress", "trace_id", req.TraceId, "chain_code", req.ChainCode, "address", req.Address)
 
-	valid, err := s.keySvc.VerifyContractAddress(ctx, &service.VerifyContractAddressInput{
+	valid, err := s.keySvc.VerifyContractAddress(ctx, &types.VerifyContractAddressInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
 		Address:   req.Address,
@@ -152,7 +160,7 @@ func (s *Server) VerifyContractAddress(ctx context.Context, req *proto.VerifyCon
 func (s *Server) CheckSufficientBalance(ctx context.Context, req *proto.CheckSufficientBalanceRequest) (*proto.CheckSufficientBalanceResponse, error) {
 	log.Info("CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "is_base_coin", req.IsBasicCoin, "from", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
 
-	result, err := s.keySvc.CheckSufficientBalance(ctx, &service.BalanceInput{
+	result, err := s.keySvc.CheckSufficientBalance(ctx, &types.BalanceInput{
 		TraceID:     req.TraceId,
 		ChainCode:   req.ChainCode,
 		Coin:        req.Coin,

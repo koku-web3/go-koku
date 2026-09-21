@@ -35,14 +35,14 @@ func main() {
 		fatalf("Failed to wire denpendencies: %v\n", err)
 	}
 
-	keySvc := service.NewKeyService(deps.Repo, deps.KeyCreator, deps.TxBuilder)
+	keyMgr := service.NewKeyService(deps.Repo, deps.KeyCreator, deps.TxBuilder)
 	transferSvc := service.NewTransferService(deps.Repo, deps.TxBuilder, deps.Signer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
 
-	grpcSrv := grpcpkg.NewServer(cfg, keySvc, deps.Repo, deps.ServerTLS)
+	grpcSrv := grpcpkg.NewServer(cfg, keyMgr, deps.Repo, deps.ServerTLS)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

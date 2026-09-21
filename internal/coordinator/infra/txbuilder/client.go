@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	tbgrpc "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
@@ -69,7 +70,7 @@ func NewClient(cfg Config, chainsP ChainProvider) (*Client, error) {
 }
 
 func (c *Client) VerifyAddress(ctx context.Context, req *tbgrpc.VerifyAddressRequest, chainCode string) (*tbgrpc.VerifyAddressResponse, error) {
-	log.Debug("TxBuilderClient.VerifyAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
+	log.Info("TxBuilderClient.VerifyAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
 	client, err := c.getClient(chainCode)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (c *Client) VerifyAddress(ctx context.Context, req *tbgrpc.VerifyAddressReq
 }
 
 func (c *Client) VerifyContractAddress(ctx context.Context, req *tbgrpc.VerifyContractAddressRequest, chainCode string) (*tbgrpc.VerifyContractAddressResponse, error) {
-	log.Debug("TxBuilderClient.VerifyContractAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
+	log.Info("TxBuilderClient.VerifyContractAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
 	client, err := c.getClient(chainCode)
 	if err != nil {
 		return nil, err
@@ -87,7 +88,7 @@ func (c *Client) VerifyContractAddress(ctx context.Context, req *tbgrpc.VerifyCo
 }
 
 func (c *Client) ConvertAddress(ctx context.Context, req *tbgrpc.ConvertAddressRequest, chainCode string) (*tbgrpc.ConvertAddressResponse, error) {
-	log.Debug("TxBuilderClient.ConvertAddress", "trace_id", req.TraceId, "chain_code", chainCode)
+	log.Info("TxBuilderClient.ConvertAddress", "trace_id", req.TraceId, "chain_code", chainCode)
 	if len(req.Keys) == 0 {
 		return nil, fmt.Errorf("keys is empty")
 	}
@@ -99,7 +100,7 @@ func (c *Client) ConvertAddress(ctx context.Context, req *tbgrpc.ConvertAddressR
 }
 
 func (c *Client) CheckSufficientBalance(ctx context.Context, req *tbgrpc.CheckSufficientBalanceRequest) (*tbgrpc.CheckSufficientBalanceResponse, error) {
-	log.Debug("TxBuilderClient.CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "fromAddress", req.FromAddress, "amount", req.Amount, "contract", req.Contract, "isBaseCoin", req.IsBasicCoin)
+	log.Info("TxBuilderClient.CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "fromAddress", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
 	client, err := c.getClient(req.ChainCode)
 	if err != nil {
 		log.Warn("failed to getClient", "chain_code", req.ChainCode, "err", err.Error())
@@ -109,22 +110,33 @@ func (c *Client) CheckSufficientBalance(ctx context.Context, req *tbgrpc.CheckSu
 }
 
 func (c *Client) BuildSignRawData(ctx context.Context, req *tbgrpc.BuildSignRawDataRequest) (*tbgrpc.BuildSignRawDataResponse, error) {
-	log.Debug("TxBuilderClient.BuildSignRawData", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "coin_symbol", req.CoinSymbol, "from_address", req.FromAddress, "to_address", req.ToAddress, "amount", req.Amount, "contract", req.Contract, "isBaseCoin", req.IsBasicCoin)
+	log.Info("ready to call TxBuilderClient.BuildSignRawData", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "coin_symbol", req.CoinSymbol, "from_address", req.FromAddress, "to_address", req.ToAddress, "amount", req.Amount, "contract", req.Contract)
 	client, err := c.getClient(req.ChainCode)
 	if err != nil {
 		log.Warn("failed to getClient", "chain_code", req.ChainCode, "err", err.Error())
 		return nil, err
 	}
-	return client.BuildSignRawData(ctx, req)
+	res, err := client.BuildSignRawData(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("call TxBuilderClient.BuildSignRawData failed: %w", err)
+	}
+	return res, nil
 }
 
 func (c *Client) TxBroadcast(ctx context.Context, in *tbgrpc.TxBroadcastRequest, chainCode string, opts ...grpc.CallOption) (*tbgrpc.TxBroadcastResponse, error) {
-	log.Debug("TxBuilderClient.TxBroadcast", "trace_id", in.TraceId, "chain_code", chainCode)
+	log.Info("ready to call TxBuilderClient.TxBroadcast", "trace_id", in.TraceId, "chain_code", chainCode)
 	client, err := c.getClient(chainCode)
 	if err != nil {
 		return nil, err
 	}
-	return client.TxBroadcast(ctx, in, opts...)
+	start := time.Now()
+	res, err := client.TxBroadcast(ctx, in, opts...)
+	cost := time.Since(start)
+	log.Info("call TxBuilderClient.TxBroadcast completed", "time_cost", cost.Microseconds(), "success", err == nil)
+	if err != nil {
+		return nil, fmt.Errorf("call TxBuilderClient.TxBroadcast failed: %w", err)
+	}
+	return res, nil
 }
 
 func (c *Client) getClient(chainCode string) (tbgrpc.TxBuilderClient, error) {
@@ -132,6 +144,7 @@ func (c *Client) getClient(chainCode string) (tbgrpc.TxBuilderClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Info("get chain client success", "chain_code", chainCode)
 	return cc.GetClient()
 }
 

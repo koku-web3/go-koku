@@ -93,10 +93,10 @@ func TestSecp256k1Algorithm_NewPrivateKeyFromBytes_InvalidLength(t *testing.T) {
 func TestSecp256k1Algorithm_Sign(t *testing.T) {
 	algo := NewSecp256k1Algorithm()
 	// 使用与 MockPrivKey 不同的测试值避免冲突
-	testPrivKey := "218f84362a3c489e21d6f8176f03dd9a1cc208b9fcfe02f9eb2e35714e28d070"
+	testPrivKey := "5a457ac8acd12bd7b0adf248495ea06d92985d4433650c08d8296c89d3d00985"
 	privKeyBytes, _ := hex.DecodeString(testPrivKey)
 	privKey, _ := algo.NewPrivateKeyFromBytes(privKeyBytes)
-	message, _ := hex.DecodeString("25b213b6d60d41921e1610945a0ba64562c87506191fd3b897c6cc068331f901")
+	message, _ := hex.DecodeString("803d303d661565b6162e41a83927929ee8c78a2f8043578fd4529639c7744970")
 	signature, err := algo.Sign(privKey, message)
 	if err != nil {
 		t.Fatalf("Sign() error = %v", err)

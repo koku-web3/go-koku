@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	TxBuilder_ConvertAddress_FullMethodName         = "/txbuilder.TxBuilder/ConvertAddress"
 	TxBuilder_VerifyAddress_FullMethodName          = "/txbuilder.TxBuilder/VerifyAddress"
 	TxBuilder_VerifyContractAddress_FullMethodName  = "/txbuilder.TxBuilder/VerifyContractAddress"
-	TxBuilder_ConvertAddress_FullMethodName         = "/txbuilder.TxBuilder/ConvertAddress"
 	TxBuilder_CheckSufficientBalance_FullMethodName = "/txbuilder.TxBuilder/CheckSufficientBalance"
 	TxBuilder_BuildSignRawData_FullMethodName       = "/txbuilder.TxBuilder/BuildSignRawData"
 	TxBuilder_TxBroadcast_FullMethodName            = "/txbuilder.TxBuilder/TxBroadcast"
@@ -33,12 +33,12 @@ const (
 //
 // TxBuilder service provides transaction construction APIs
 type TxBuilderClient interface {
+	// Convert PEM-encoded public keys to Ethereum addresses
+	ConvertAddress(ctx context.Context, in *ConvertAddressRequest, opts ...grpc.CallOption) (*ConvertAddressResponse, error)
 	// Verify if an address is valid
 	VerifyAddress(ctx context.Context, in *VerifyAddressRequest, opts ...grpc.CallOption) (*VerifyAddressResponse, error)
 	// Verify if a contract address is valid
 	VerifyContractAddress(ctx context.Context, in *VerifyContractAddressRequest, opts ...grpc.CallOption) (*VerifyContractAddressResponse, error)
-	// Convert a PKIX-PEM public key to a TRON address
-	ConvertAddress(ctx context.Context, in *ConvertAddressRequest, opts ...grpc.CallOption) (*ConvertAddressResponse, error)
 	// Check if the balance is sufficient for a transfer
 	CheckSufficientBalance(ctx context.Context, in *CheckSufficientBalanceRequest, opts ...grpc.CallOption) (*CheckSufficientBalanceResponse, error)
 	// Build unsigned transaction raw data for signing
@@ -55,6 +55,16 @@ func NewTxBuilderClient(cc grpc.ClientConnInterface) TxBuilderClient {
 	return &txBuilderClient{cc}
 }
 
+func (c *txBuilderClient) ConvertAddress(ctx context.Context, in *ConvertAddressRequest, opts ...grpc.CallOption) (*ConvertAddressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConvertAddressResponse)
+	err := c.cc.Invoke(ctx, TxBuilder_ConvertAddress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *txBuilderClient) VerifyAddress(ctx context.Context, in *VerifyAddressRequest, opts ...grpc.CallOption) (*VerifyAddressResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(VerifyAddressResponse)
@@ -69,16 +79,6 @@ func (c *txBuilderClient) VerifyContractAddress(ctx context.Context, in *VerifyC
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(VerifyContractAddressResponse)
 	err := c.cc.Invoke(ctx, TxBuilder_VerifyContractAddress_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *txBuilderClient) ConvertAddress(ctx context.Context, in *ConvertAddressRequest, opts ...grpc.CallOption) (*ConvertAddressResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ConvertAddressResponse)
-	err := c.cc.Invoke(ctx, TxBuilder_ConvertAddress_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,12 +121,12 @@ func (c *txBuilderClient) TxBroadcast(ctx context.Context, in *TxBroadcastReques
 //
 // TxBuilder service provides transaction construction APIs
 type TxBuilderServer interface {
+	// Convert PEM-encoded public keys to Ethereum addresses
+	ConvertAddress(context.Context, *ConvertAddressRequest) (*ConvertAddressResponse, error)
 	// Verify if an address is valid
 	VerifyAddress(context.Context, *VerifyAddressRequest) (*VerifyAddressResponse, error)
 	// Verify if a contract address is valid
 	VerifyContractAddress(context.Context, *VerifyContractAddressRequest) (*VerifyContractAddressResponse, error)
-	// Convert a PKIX-PEM public key to a TRON address
-	ConvertAddress(context.Context, *ConvertAddressRequest) (*ConvertAddressResponse, error)
 	// Check if the balance is sufficient for a transfer
 	CheckSufficientBalance(context.Context, *CheckSufficientBalanceRequest) (*CheckSufficientBalanceResponse, error)
 	// Build unsigned transaction raw data for signing
@@ -143,14 +143,14 @@ type TxBuilderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedTxBuilderServer struct{}
 
+func (UnimplementedTxBuilderServer) ConvertAddress(context.Context, *ConvertAddressRequest) (*ConvertAddressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConvertAddress not implemented")
+}
 func (UnimplementedTxBuilderServer) VerifyAddress(context.Context, *VerifyAddressRequest) (*VerifyAddressResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method VerifyAddress not implemented")
 }
 func (UnimplementedTxBuilderServer) VerifyContractAddress(context.Context, *VerifyContractAddressRequest) (*VerifyContractAddressResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method VerifyContractAddress not implemented")
-}
-func (UnimplementedTxBuilderServer) ConvertAddress(context.Context, *ConvertAddressRequest) (*ConvertAddressResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ConvertAddress not implemented")
 }
 func (UnimplementedTxBuilderServer) CheckSufficientBalance(context.Context, *CheckSufficientBalanceRequest) (*CheckSufficientBalanceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckSufficientBalance not implemented")
@@ -180,6 +180,24 @@ func RegisterTxBuilderServer(s grpc.ServiceRegistrar, srv TxBuilderServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&TxBuilder_ServiceDesc, srv)
+}
+
+func _TxBuilder_ConvertAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConvertAddressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TxBuilderServer).ConvertAddress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TxBuilder_ConvertAddress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TxBuilderServer).ConvertAddress(ctx, req.(*ConvertAddressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _TxBuilder_VerifyAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -214,24 +232,6 @@ func _TxBuilder_VerifyContractAddress_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(TxBuilderServer).VerifyContractAddress(ctx, req.(*VerifyContractAddressRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _TxBuilder_ConvertAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConvertAddressRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(TxBuilderServer).ConvertAddress(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: TxBuilder_ConvertAddress_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TxBuilderServer).ConvertAddress(ctx, req.(*ConvertAddressRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -298,16 +298,16 @@ var TxBuilder_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*TxBuilderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "ConvertAddress",
+			Handler:    _TxBuilder_ConvertAddress_Handler,
+		},
+		{
 			MethodName: "VerifyAddress",
 			Handler:    _TxBuilder_VerifyAddress_Handler,
 		},
 		{
 			MethodName: "VerifyContractAddress",
 			Handler:    _TxBuilder_VerifyContractAddress_Handler,
-		},
-		{
-			MethodName: "ConvertAddress",
-			Handler:    _TxBuilder_ConvertAddress_Handler,
 		},
 		{
 			MethodName: "CheckSufficientBalance",

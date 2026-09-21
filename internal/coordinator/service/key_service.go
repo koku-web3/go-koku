@@ -7,56 +7,53 @@ import (
 
 	"github.com/koku-web3/go-koku/internal/coordinator/infra/keycreator"
 	"github.com/koku-web3/go-koku/internal/coordinator/infra/txbuilder"
+	"github.com/koku-web3/go-koku/internal/coordinator/key"
 	"github.com/koku-web3/go-koku/internal/coordinator/model"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
+	"github.com/koku-web3/go-koku/internal/coordinator/types"
 	"github.com/koku-web3/go-koku/pkg/keyutil"
+	log "github.com/koku-web3/go-koku/pkg/logko"
 	coordinator "github.com/koku-web3/go-koku/pkg/proto/coordinator"
 	tbproto "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
 )
 
-type keyServiceImpl struct {
+type keyService struct {
 	repo     repository.KeyRepository
 	kcClient *keycreator.Client
 	txClient *txbuilder.Client
 }
 
-func NewKeyService(repo repository.KeyRepository, kc *keycreator.Client, tx *txbuilder.Client) KeyService {
-	return &keyServiceImpl{repo: repo, kcClient: kc, txClient: tx}
+func NewKeyService(repo repository.KeyRepository, kc *keycreator.Client, tx *txbuilder.Client) key.KeyManager {
+	return &keyService{repo: repo, kcClient: kc, txClient: tx}
 }
 
-type GenesisInput struct {
-	TraceID   string
-	ChainCode string
-	KeyType   string
-}
-
-func (s *keyServiceImpl) Genesis(ctx context.Context, in *GenesisInput) error {
+func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error {
 	if err := validateTraceId(in.TraceID); err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidParam, err)
+		return fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 	if err := validateChainCode(in.ChainCode); err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidParam, err)
+		return fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 
 	existing, err := s.repo.GetMasterKeyByChainCode(ctx, in.ChainCode)
 	if err != nil {
-		return fmt.Errorf("%w: failed to check master key: %s", ErrNetwork, err)
+		return fmt.Errorf("%w: failed to check master key: %s", key.ErrNetwork, err)
 	}
 	if existing != nil {
-		return fmt.Errorf("%w: master keys already exist for chain %s", ErrGenesisExists, in.ChainCode)
+		return fmt.Errorf("%w: master keys already exist for chain %s", key.ErrGenesisExists, in.ChainCode)
 	}
 
 	count, err := s.repo.GetCoreKeyCountByChainCode(ctx, in.ChainCode)
 	if err != nil {
-		return fmt.Errorf("%w: failed to check core keys: %s", ErrNetwork, err)
+		return fmt.Errorf("%w: failed to check core keys: %s", key.ErrNetwork, err)
 	}
 	if count > 0 {
-		return fmt.Errorf("%w: core keys already exist for chain %s", ErrGenesisExists, in.ChainCode)
+		return fmt.Errorf("%w: core keys already exist for chain %s", key.ErrGenesisExists, in.ChainCode)
 	}
 
 	result, err := s.kcClient.Genesis(ctx, in.TraceID, in.ChainCode, in.KeyType)
 	if err != nil {
-		return fmt.Errorf("%w: key creator genesis failed: %s", ErrNetwork, err)
+		return fmt.Errorf("%w: key creator genesis failed: %s", key.ErrNetwork, err)
 	}
 
 	masterKey := &model.MasterKey{
@@ -81,51 +78,56 @@ func (s *keyServiceImpl) Genesis(ctx context.Context, in *GenesisInput) error {
 	}
 
 	if err := s.repo.InsertGenesisRecordsAtomic(ctx, masterKey, coreKeys); err != nil {
-		return fmt.Errorf("%w: failed to save genesis records: %s", ErrNetwork, err)
+		return fmt.Errorf("%w: failed to save genesis records: %s", key.ErrNetwork, err)
 	}
 
 	return nil
 }
 
-type CreateKeyInput struct {
-	TraceID   string
-	ChainCode string
-	Usage     keyutil.AccountUsage
-	Count     int32
-}
-
-func (s *keyServiceImpl) CreateKey(ctx context.Context, in *CreateKeyInput) ([]*coordinator.AddressInfo, error) {
+func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([]*coordinator.AddressInfo, error) {
 	if err := validateTraceId(in.TraceID); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidParam, err)
+		log.Error("[CreateKey] invalid trace_id", "trace_id", in.TraceID, "error", err)
+		return nil, fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 	if err := validateChainCode(in.ChainCode); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidParam, err)
+		log.Error("[CreateKey] invalid chain_code", "chain_code", in.ChainCode, "error", err)
+		return nil, fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 	if in.Count < 1 || in.Count > 50 {
-		return nil, fmt.Errorf("%w: count must be 1-50", ErrInvalidParam)
+		log.Error("[CreateKey] count out of range", "count", in.Count)
+		return nil, fmt.Errorf("%w: count must be 1-50", key.ErrInvalidParam)
 	}
+
+	log.Info("[CreateKey] starting", "trace_id", in.TraceID, "chain_code", in.ChainCode, "usage", in.Usage, "count", in.Count)
 
 	maxIndex, err := s.repo.GetMaxAccountIndex(ctx, in.ChainCode, in.Usage.ToUin32())
 	if err != nil {
-		return nil, fmt.Errorf("%w: GetMaxAccountIndex failed: %s", ErrNetwork, err)
+		log.Error("[CreateKey] GetMaxAccountIndex failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
+		return nil, fmt.Errorf("%w: GetMaxAccountIndex failed: %s", key.ErrNetwork, err)
 	}
 	accountIndexStart := maxIndex + 1
 
 	coreKey, err := s.repo.GetCoreKeyByChainCodeAndUsage(ctx, in.ChainCode, in.Usage.ToUin32())
 	if err != nil {
-		return nil, fmt.Errorf("%w: GetCoreKeyByChainCodeAndUsage failed: %s", ErrNetwork, err)
+		log.Error("[CreateKey] GetCoreKeyByChainCodeAndUsage failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
+		return nil, fmt.Errorf("%w: GetCoreKeyByChainCodeAndUsage failed: %s", key.ErrNetwork, err)
 	}
 	if coreKey == nil {
-		return nil, fmt.Errorf("%w: core key not found, run genesis first", ErrKeyNotFound)
+		log.Error("[CreateKey] core key not found", "trace_id", in.TraceID, "chain_code", in.ChainCode)
+		return nil, fmt.Errorf("%w: core key not found, run genesis first", key.ErrKeyNotFound)
 	}
 
 	masterKey, err := s.repo.GetMasterKeyByChainCode(ctx, in.ChainCode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: GetMasterKeyByChainCode failed: %s", ErrNetwork, err)
+		log.Error("[CreateKey] GetMasterKeyByChainCode failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
+		return nil, fmt.Errorf("%w: GetMasterKeyByChainCode failed: %s", key.ErrNetwork, err)
 	}
 	if masterKey == nil {
-		return nil, fmt.Errorf("%w: master key not found, run genesis first", ErrKeyNotFound)
+		log.Error("[CreateKey] master key not found", "trace_id", in.TraceID, "chain_code", in.ChainCode)
+		return nil, fmt.Errorf("%w: master key not found, run genesis first", key.ErrKeyNotFound)
 	}
+
+	log.Info("[CreateKey] calling key creator", "trace_id", in.TraceID, "account_index_start", accountIndexStart)
 
 	var createResult *keycreator.CreateKeyResult
 	if in.Usage == keyutil.KEY_USAGE_OPERATIONAL {
@@ -134,8 +136,11 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, in *CreateKeyInput) ([]*
 		createResult, err = s.kcClient.CreateUserKey(ctx, in.TraceID, in.ChainCode, coreKey.Bip44Path, accountIndexStart, uint32(in.Count), coreKey.Bip32KeyCiphertext, masterKey.KeyType)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: key creator CreateKey failed: %s", ErrNetwork, err)
+		log.Error("[CreateKey] key creator CreateKey failed", "trace_id", in.TraceID, "error", err)
+		return nil, fmt.Errorf("%w: key creator CreateKey failed: %s", key.ErrNetwork, err)
 	}
+
+	log.Info("[CreateKey] converting addresses", "trace_id", in.TraceID, "key_count", len(createResult.Keys))
 
 	pkixList := make([]*tbproto.PublicKeysRequest, 0, len(createResult.Keys))
 	for _, key := range createResult.Keys {
@@ -145,16 +150,16 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, in *CreateKeyInput) ([]*
 		})
 	}
 
-	callRes, err := s.txClient.ConvertAddress(ctx, &tbproto.ConvertAddressRequest{
-		TraceId: in.TraceID,
-		Keys:    pkixList,
-	}, in.ChainCode)
+	callRes, err := s.txClient.ConvertAddress(ctx, &tbproto.ConvertAddressRequest{TraceId: in.TraceID, Keys: pkixList}, in.ChainCode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: ConvertAddress failed: %s", ErrNetwork, err)
+		log.Error("[CreateKey] ConvertAddress failed", "trace_id", in.TraceID, "error", err)
+		return nil, fmt.Errorf("%w: ConvertAddress failed: %s", key.ErrNetwork, err)
 	}
 
+	log.Info("[CreateKey] ConvertAddress response success", "trace_id", in.TraceID, "address_count", len(callRes.Keys))
+
 	addrMap := make(map[uint32]string)
-	for _, addr := range callRes.AddressList {
+	for _, addr := range callRes.Keys {
 		addrMap[addr.AccountIndex] = addr.Address
 	}
 
@@ -179,76 +184,53 @@ func (s *keyServiceImpl) CreateKey(ctx context.Context, in *CreateKeyInput) ([]*
 		})
 	}
 
+	log.Info("[CreateKey] saving keys to db", "trace_id", in.TraceID, "key_count", len(keys))
+
 	if err := s.repo.CreateKeys(ctx, keys); err != nil {
-		return nil, fmt.Errorf("%w: failed to save keys: %s", ErrNetwork, err)
+		log.Error("[CreateKey] failed to save keys", "trace_id", in.TraceID, "error", err)
+		return nil, fmt.Errorf("%w: failed to save keys: %s", key.ErrNetwork, err)
 	}
+
+	log.Info("[CreateKey] completed", "trace_id", in.TraceID, "address_count", len(addressInfos))
 
 	return addressInfos, nil
 }
 
-type VerifyAddressInput struct {
-	TraceID   string
-	ChainCode string
-	Address   string
-}
-
-func (s *keyServiceImpl) VerifyAddress(ctx context.Context, in *VerifyAddressInput) (bool, error) {
+func (s *keyService) VerifyAddress(ctx context.Context, in *types.VerifyAddressInput) (bool, error) {
 	resp, err := s.txClient.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
 		TraceId: in.TraceID,
 		Address: in.Address,
 	}, in.ChainCode)
 	if err != nil {
-		return false, fmt.Errorf("%w: VerifyAddress failed: %s", ErrNetwork, err)
+		return false, fmt.Errorf("%w: VerifyAddress failed: %s", key.ErrNetwork, err)
 	}
 	return resp.IsValid, nil
 }
 
-type VerifyContractAddressInput struct {
-	TraceID   string
-	ChainCode string
-	Address   string
-}
-
-func (s *keyServiceImpl) VerifyContractAddress(ctx context.Context, in *VerifyContractAddressInput) (bool, error) {
+func (s *keyService) VerifyContractAddress(ctx context.Context, in *types.VerifyContractAddressInput) (bool, error) {
 	resp, err := s.txClient.VerifyContractAddress(ctx, &tbproto.VerifyContractAddressRequest{
 		TraceId: in.TraceID,
 		Address: in.Address,
 	}, in.ChainCode)
 	if err != nil {
-		return false, fmt.Errorf("%w: VerifyContractAddress failed: %s", ErrNetwork, err)
+		return false, fmt.Errorf("%w: VerifyContractAddress failed: %s", key.ErrNetwork, err)
 	}
 	return resp.IsValid, nil
 }
 
-type BalanceInput struct {
-	TraceID     string
-	ChainCode   string
-	Coin        string
-	IsBasicCoin bool
-	FromAddress string
-	Amount      string
-	Contract    string
-}
-
-type BalanceResult struct {
-	IsCoinSufficient  bool
-	IsTokenSufficient bool
-}
-
-func (s *keyServiceImpl) CheckSufficientBalance(ctx context.Context, in *BalanceInput) (*BalanceResult, error) {
+func (s *keyService) CheckSufficientBalance(ctx context.Context, in *types.BalanceInput) (*types.BalanceResult, error) {
 	resp, err := s.txClient.CheckSufficientBalance(ctx, &tbproto.CheckSufficientBalanceRequest{
 		TraceId:     in.TraceID,
 		ChainCode:   in.ChainCode,
 		Coin:        in.Coin,
-		IsBasicCoin: in.IsBasicCoin,
 		FromAddress: in.FromAddress,
 		Amount:      in.Amount,
 		Contract:    in.Contract,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: CheckSufficientBalance failed: %s", ErrNetwork, err)
+		return nil, fmt.Errorf("%w: CheckSufficientBalance failed: %s", key.ErrNetwork, err)
 	}
-	return &BalanceResult{
+	return &types.BalanceResult{
 		IsCoinSufficient:  resp.IsCoinSufficient,
 		IsTokenSufficient: resp.IsTokenSufficient,
 	}, nil

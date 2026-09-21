@@ -47,8 +47,8 @@ INSERT INTO `chains` (
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://sepolia.etherscan.io/',
     12,
-    'http://127.0.0.1:8001',
-    'http://127.0.0.1:8001'
+    '127.0.0.1:51051',
+    'http://127.0.0.1:81051'
 ) ON DUPLICATE KEY UPDATE
     `base_coin` = VALUES(`base_coin`),
     `rpc_url` = VALUES(`rpc_url`),

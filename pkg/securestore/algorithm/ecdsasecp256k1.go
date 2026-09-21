@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"encoding/asn1"
 	"fmt"
+	"io"
 	"math/big"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -28,6 +29,27 @@ type secpPrivKey struct {
 func (k *secpPrivKey) PubKey() *btcec.PublicKey { return k.priv.PubKey() }
 func (k *secpPrivKey) Serialize() []byte        { return k.priv.Serialize() }
 func (k *secpPrivKey) Zero()                    { k.priv.Zero() }
+
+// crypto.Signer 接口实现
+func (k *secpPrivKey) Public() crypto.PublicKey {
+	return k.priv.PubKey()
+}
+
+func (k *secpPrivKey) Sign(_ io.Reader, digest []byte, _ crypto.SignerOpts) ([]byte, error) {
+	// btcecdsa.SignCompact 返回 65 字节: (27+v) || R(32) || S(32)
+	compact := btcecdsa.SignCompact(k.priv, digest, false)
+	rBytes := compact[1:33]
+	sBytes := compact[33:65]
+
+	// V: 直接从 SignCompact 的 recovery_code 提取 parity
+	v := (compact[0] - 27) & 1
+
+	result := make([]byte, 65)
+	copy(result[0:32], rBytes)  // R
+	copy(result[32:64], sBytes) // S
+	result[64] = v              // V
+	return result, nil
+}
 
 // Secp256k1Algorithm secp256k1 椭圆曲线 ECDSA 算法实现
 type Secp256k1Algorithm struct{ algorithmID string }
@@ -83,21 +105,22 @@ func (a *Secp256k1Algorithm) Sign(privateKey crypto.PrivateKey, message []byte) 
 		return nil, fmt.Errorf("privateKey is not *secpPrivKey")
 	}
 	// btcecdsa.SignCompact 返回 65 字节: (27+v) || R(32) || S(32)
-	// v = (overflow_bit << 1) + oddness_bit，范围 [0, 3]
+	// v = (overflow_bit << 1) + parity_bit，范围 [0, 3]
 	compact := btcecdsa.SignCompact(k.priv, message, false)
 	rBytes := compact[1:33]
 	sBytes := compact[33:65]
 
-	// V: 直接从 SignCompact 的 recovery_code 提取 oddness
-	// recovery_code = 27 + (overflow << 1) + oddness
-	// oddness = recovery_code & 1 (bit 0)
-	// 注意: 不要用 DecompressY 重新计算，因为 low-S 规范化时会翻转 oddness
-	v := (compact[0] - 27) & 1 // 提取 bit 0 (oddness)
+	// V: 直接从 SignCompact 的 recovery_code 提取 parity
+	// recovery_code = 27 + (overflow << 1) + parity
+	// parity = recovery_code & 1 (bit 0)
+	// 注意: 不要用 DecompressY 重新计算，因为 low-S 规范化时会翻转 parity
+	v := (compact[0] - 27) & 1 // 提取 bit 0 (parity)
 
 	result := make([]byte, 65)
 	copy(result[0:32], rBytes)  // R
 	copy(result[32:64], sBytes) // S
 	result[64] = v              // V
+
 	return result, nil
 }
 
@@ -123,8 +146,7 @@ func (a *Secp256k1Algorithm) ParsePrivateKey(derBytes []byte) (crypto.PrivateKey
 	if err != nil {
 		return nil, err
 	}
-	priv, _ := btcec.PrivKeyFromBytes(privBytes)
-	return wrapPrivKey(priv), nil
+	return a.NewPrivateKeyFromBytes(privBytes)
 }
 
 func (a *Secp256k1Algorithm) ClearPrivateKey(privateKey crypto.PrivateKey) {

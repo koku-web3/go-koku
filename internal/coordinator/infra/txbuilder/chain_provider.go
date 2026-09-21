@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
+	log "github.com/koku-web3/go-koku/pkg/logko"
 )
 
 // chainProviderAdapter 用于将 KeyRepository 适配为 ChainProvider 接口
@@ -24,6 +25,7 @@ func (a *chainProviderAdapter) GetChainByCode(chainCode string) (string, bool) {
 	}
 
 	addr := chain.TxBuilderServGRPC
+	log.Info("get chain infomation from DB success", "chain_code", chainCode, "grpc_url", addr)
 	if len(addr) == 0 || len(strings.TrimSpace(addr)) == 0 {
 		return "", false
 	}

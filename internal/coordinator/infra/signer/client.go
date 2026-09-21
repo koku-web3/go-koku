@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	signergrpc "github.com/koku-web3/go-koku/pkg/proto/signer"
@@ -59,76 +60,16 @@ type SignResult struct {
 	Signature string
 }
 
-func (c *Client) Sign(
-	ctx context.Context,
-	traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string,
-) (*SignResult, error) {
-	log.Info("Sign", "trace_id", traceID, "chain_code", chainCode)
-
-	if bip44Path == "" {
-		return nil, fmt.Errorf("bip44_path is required")
-	}
-	if privKeyCiphertext == "" {
-		return nil, fmt.Errorf("priv_key_ciphertext is required")
-	}
-
-	req := &signergrpc.SignRequest{
-		TraceId:           traceID,
-		ChainCode:         chainCode,
-		Bip44Path:         bip44Path,
-		KeyType:           keyType,
-		Message:           message,
-		PrivKeyCiphertext: privKeyCiphertext,
-	}
-
-	resp, err := c.signer.SignAcct0(ctx, req)
-	if err != nil {
-		log.Error("Sign failed", "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("signer SignAcct0 failed: %w", err)
-	}
-
-	return &SignResult{
-		TraceID:   traceID,
-		Signature: resp.Signature,
-	}, nil
+func (c *Client) SignAcct0(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string) (*SignResult, error) {
+	return c.signCommon(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, c.signer.SignAcct0)
 }
 
-func (c *Client) SignAcct0(
-	ctx context.Context,
-	traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string,
-) (*SignResult, error) {
-	log.Info("SignAcct0", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
-
-	if bip44Path == "" {
-		return nil, fmt.Errorf("bip44_path is required")
-	}
-	if privKeyCiphertext == "" {
-		return nil, fmt.Errorf("priv_key_ciphertext is required")
-	}
-
-	req := &signergrpc.SignRequest{
-		TraceId:           traceID,
-		ChainCode:         chainCode,
-		Bip44Path:         bip44Path,
-		KeyType:           keyType,
-		Message:           message,
-		PrivKeyCiphertext: privKeyCiphertext,
-	}
-
-	resp, err := c.signer.SignAcct0(ctx, req)
-	if err != nil {
-		log.Error("SignAcct0 failed", "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("signer SignAcct0 failed: %w", err)
-	}
-
-	return &SignResult{TraceID: traceID, Signature: resp.Signature}, nil
+func (c *Client) SignAcct1(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string) (*SignResult, error) {
+	return c.signCommon(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, c.signer.SignAcct1)
 }
 
-func (c *Client) SignAcct1(
-	ctx context.Context,
-	traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string,
-) (*SignResult, error) {
-	log.Info("SignAcct1", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
+func (c *Client) signCommon(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string, signFn func(context.Context, *signergrpc.SignRequest, ...grpc.CallOption) (*signergrpc.SignResponse, error)) (*SignResult, error) {
+	log.Info("signing request", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
 
 	if bip44Path == "" {
 		return nil, fmt.Errorf("bip44_path is required")
@@ -145,11 +86,12 @@ func (c *Client) SignAcct1(
 		Message:           message,
 		PrivKeyCiphertext: privKeyCiphertext,
 	}
-
-	resp, err := c.signer.SignAcct1(ctx, req)
+	signStart := time.Now()
+	resp, err := signFn(ctx, req)
+	signCost := time.Since(signStart)
+	log.Info("sign completed", "time_cost", signCost.Microseconds(), "success", err == nil)
 	if err != nil {
-		log.Error("SignAcct1 failed", "error", err, "trace_id", traceID)
-		return nil, fmt.Errorf("signer SignAcct1 failed: %w", err)
+		return nil, fmt.Errorf("sign failed: %w", err)
 	}
 
 	return &SignResult{TraceID: traceID, Signature: resp.Signature}, nil

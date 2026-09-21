@@ -6,23 +6,22 @@ option go_package = "github.com/koku-web3/go-koku/pkg/proto/txbuilder;txbuilder"
 
 // TxBuilder service provides transaction construction APIs
 service TxBuilder {
-  // 校验地址是否合法
-  rpc VerifyAddress(VerifyAddressRequest) returns (VerifyAddressResponse);
-
-  // 校验合约地址是否合法
-  rpc VerifyContractAddress(VerifyContractAddressRequest) returns (VerifyContractAddressResponse);
-
-  // 将 PKIX 标准的 PEM 格式公钥转换为指定区块链的地址
+  // Convert PEM-encoded public keys to Ethereum addresses
   rpc ConvertAddress(ConvertAddressRequest) returns (ConvertAddressResponse);
 
-  // 检查地址是否有足够的余额转账
-  // 支持检查合约余额
+  // Verify if an address is valid
+  rpc VerifyAddress(VerifyAddressRequest) returns (VerifyAddressResponse);
+
+  // Verify if a contract address is valid
+  rpc VerifyContractAddress(VerifyContractAddressRequest) returns (VerifyContractAddressResponse);
+
+  // Check if the balance is sufficient for a transfer
   rpc CheckSufficientBalance(CheckSufficientBalanceRequest) returns (CheckSufficientBalanceResponse);
 
-  // 构造未签名交易数据
+  // Build unsigned transaction raw data for signing
   rpc BuildSignRawData(BuildSignRawDataRequest) returns (BuildSignRawDataResponse);
 
-  // 广播交易
+  // Broadcast a signed transaction to the network
   rpc TxBroadcast(TxBroadcastRequest) returns (TxBroadcastResponse);
 }
 
@@ -53,12 +52,22 @@ message VerifyContractAddressResponse {
 
 // ConvertAddress
 message ConvertAddressRequest {
-  string trace_id = 1;
+  string trace_id = 1; // 1-36 必填
   repeated PublicKeysRequest keys = 2;
 }
 
+message PublicKeysRequest {
+  uint32 account_index = 1;
+  string pkix_pubkey_pem = 2; // 必填；PKIX 标准的公钥，PEM 格式
+}
+
 message ConvertAddressResponse {
-  repeated PublicKeysResponse address_list = 1;
+  repeated PublicKeysResponse keys = 1;
+}
+
+message PublicKeysResponse {
+  uint32 account_index = 1;
+  string address = 2; // Ethereum 地址（0x + 40 hex，包含 EIP-55 校验位）
 }
 
 // CheckSufficientBalance
@@ -66,10 +75,9 @@ message CheckSufficientBalanceRequest {
   string trace_id = 1; // 1-36 必填
   string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
   string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-  bool is_basic_coin = 4; // 必填；是否主链币
-  string from_address = 5; // 1-256 必填；转账发起地址
-  string amount = 6; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-  string contract = 7; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+  string from_address = 4; // 1-256 必填；转账发起地址
+  string amount = 5; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 6; // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 }
 
 message CheckSufficientBalanceResponse {
@@ -82,12 +90,11 @@ message BuildSignRawDataRequest {
   string trace_id = 1; // 1-36 必填
   string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
   string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-  bool is_basic_coin = 4; // 必填；是否主链币
-  string coin_symbol = 5; // 1-36 必填； 币种符合，用于展示，不涉及逻辑
-  string from_address = 6; // 1-256 必填；转账发起地址
-  string to_address = 7; // 1-256 必填；转账接收地址
-  string amount = 8; // 必填； 转账金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-  string contract = 9; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+  string coin_symbol = 4; // 1-36 必填； 币种符合，用于展示，不涉及逻辑
+  string from_address = 5; // 1-256 必填；转账发起地址
+  string to_address = 6; // 1-256 必填；转账接收地址
+  string amount = 7; // 必填； 转账金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 8; // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 }
 
 message BuildSignRawDataResponse {
@@ -97,21 +104,14 @@ message BuildSignRawDataResponse {
 
 // TxBroadcast
 message TxBroadcastRequest {
-  string trace_id = 1; // 1-36 必填
+  string trace_id = 1;
   string raw_data = 2; // 原始交易数据 (hex 编码)
-  string signature = 3; // 签名 (hex 编码)
+  // 长度 65 个字节
+  // 外部传入的签名数据，格式为 R（32字节） + S （32字节）+ V (V 1个字节，只有 0 或 1，表示 R.y 坐标的奇偶性)
+  string signature = 3;
 }
 
 message TxBroadcastResponse {
   bool success = 1;
-}
-
-message PublicKeysRequest {
-  uint32 account_index = 1;
-  string pkix_pubkey_pem = 2;
-}
-
-message PublicKeysResponse {
-  uint32 account_index = 1;
-  string address = 2;
+  string tx_hash = 2; // 交易哈希，广播成功后返回
 }
