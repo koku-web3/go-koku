@@ -38,7 +38,7 @@ func newChainClient(chainCode string, addr string, cfg Config) (*ChainClient, er
 		breaker:   NewCircuitBreaker(cfg.CircuitBreakerThreshold, cfg.CircuitBreakerWindow),
 	}
 
-	log.Info("ChainClient connected", "chain", chainCode, "addr", addr)
+	log.Info("Chain client connected", "chain_code", chainCode, "grpc_addr", addr)
 	return cc, nil
 }
 

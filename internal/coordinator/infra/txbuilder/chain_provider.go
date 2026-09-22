@@ -25,7 +25,7 @@ func (a *chainProviderAdapter) GetChainByCode(chainCode string) (string, bool) {
 	}
 
 	addr := chain.TxBuilderServGRPC
-	log.Info("get chain infomation from DB success", "chain_code", chainCode, "grpc_url", addr)
+	log.Info("Get chain information from DB success", "chain_code", chainCode, "grpc_url", addr)
 	if len(addr) == 0 || len(strings.TrimSpace(addr)) == 0 {
 		return "", false
 	}

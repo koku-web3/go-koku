@@ -98,7 +98,7 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 
 	// 入参校验
 	if err := validateSignRequest(req); err != nil {
-		log.Error("Sign validation failed", "error", err, "trace_id", req.TraceId)
+		log.Error("Sign validation failed", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 		return nil, fmt.Errorf("failed to sign message: %w", err)
 	}
 
-	log.Info("sign message success!")
+	log.Info("Sign message success")
 	return &proto.SignResponse{
 		Signature: hex.EncodeToString(signature),
 	}, nil

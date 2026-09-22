@@ -69,7 +69,7 @@ func (c *Client) SignAcct1(ctx context.Context, traceID, chainCode, bip44Path, k
 }
 
 func (c *Client) signCommon(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string, signFn func(context.Context, *signergrpc.SignRequest, ...grpc.CallOption) (*signergrpc.SignResponse, error)) (*SignResult, error) {
-	log.Info("signing request", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
+	log.Info("Signing request", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
 
 	if bip44Path == "" {
 		return nil, fmt.Errorf("bip44_path is required")
@@ -89,7 +89,7 @@ func (c *Client) signCommon(ctx context.Context, traceID, chainCode, bip44Path, 
 	signStart := time.Now()
 	resp, err := signFn(ctx, req)
 	signCost := time.Since(signStart)
-	log.Info("sign completed", "time_cost", signCost.Microseconds(), "success", err == nil)
+	log.Info("Sign completed", "time_cost_us", signCost.Microseconds(), "success", err == nil)
 	if err != nil {
 		return nil, fmt.Errorf("sign failed: %w", err)
 	}

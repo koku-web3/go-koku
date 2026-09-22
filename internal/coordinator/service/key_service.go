@@ -127,7 +127,7 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 		return nil, fmt.Errorf("%w: master key not found, run genesis first", key.ErrKeyNotFound)
 	}
 
-	log.Info("[CreateKey] calling key creator", "trace_id", in.TraceID, "account_index_start", accountIndexStart)
+	log.Debug("[CreateKey] calling key creator", "trace_id", in.TraceID, "account_index_start", accountIndexStart)
 
 	var createResult *keycreator.CreateKeyResult
 	if in.Usage == keyutil.KEY_USAGE_OPERATIONAL {
@@ -140,7 +140,7 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 		return nil, fmt.Errorf("%w: key creator CreateKey failed: %s", key.ErrNetwork, err)
 	}
 
-	log.Info("[CreateKey] converting addresses", "trace_id", in.TraceID, "key_count", len(createResult.Keys))
+	log.Debug("[CreateKey] converting addresses", "trace_id", in.TraceID, "key_count", len(createResult.Keys))
 
 	pkixList := make([]*tbproto.PublicKeysRequest, 0, len(createResult.Keys))
 	for _, key := range createResult.Keys {
@@ -156,7 +156,7 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 		return nil, fmt.Errorf("%w: ConvertAddress failed: %s", key.ErrNetwork, err)
 	}
 
-	log.Info("[CreateKey] ConvertAddress response success", "trace_id", in.TraceID, "address_count", len(callRes.Keys))
+	log.Debug("[CreateKey] ConvertAddress response success", "trace_id", in.TraceID, "address_count", len(callRes.Keys))
 
 	addrMap := make(map[uint32]string)
 	for _, addr := range callRes.Keys {
@@ -184,7 +184,7 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 		})
 	}
 
-	log.Info("[CreateKey] saving keys to db", "trace_id", in.TraceID, "key_count", len(keys))
+	log.Debug("[CreateKey] saving keys to db", "trace_id", in.TraceID, "key_count", len(keys))
 
 	if err := s.repo.CreateKeys(ctx, keys); err != nil {
 		log.Error("[CreateKey] failed to save keys", "trace_id", in.TraceID, "error", err)

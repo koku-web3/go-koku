@@ -88,7 +88,7 @@ func (s *KeyCreatorService) Genesis(ctx context.Context, req *proto.GenesisReque
 
 	// 入参校验
 	if err := validateGenesisRequest(req); err != nil {
-		log.Error("Genesis validation failed", "error", err, "trace_id", req.TraceId)
+		log.Error("Genesis validation failed", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
@@ -118,18 +118,18 @@ func (s *KeyCreatorService) CreateUserKey(ctx context.Context, req *proto.Create
 type keyNameFunc func(string) string
 
 func (s *KeyCreatorService) createDerivedKeys(ctx context.Context, req *proto.CreateKeyRequest, expectedUsage keyutil.AccountUsage, transitName string, getKeyName keyNameFunc) (*proto.CreateKeyResponse, error) {
-	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "address_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext length", len(req.Bip32KeyCiphertext))
+	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "account_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext_length", len(req.Bip32KeyCiphertext))
 
 	// 入参校验
 	if err := validateCreateKeyRequest(req); err != nil {
-		log.Error("CreateKey validation failed", "error", err, "trace_id", req.TraceId)
+		log.Error("CreateKey validation failed", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
 	// 检查 bip44Path 的 Account 是否匹配预期用途
 	usage, err := findUsage(req.Bip44Path)
 	if err != nil {
-		log.Error("failed to resolve bip44Path's account", "error", err, "trace_id", req.TraceId)
+		log.Error("Failed to resolve bip44_path account", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid bip44Path: %w", err)
 	}
 	if usage != expectedUsage {
@@ -298,17 +298,7 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("failed to encrypt user key: %w", err)
 	}
 
-	log.Info("Genesis succeeded", "trace_id",
-		traceId, "chain_code",
-		chainCode, "key_type",
-		keyType, "masterkey_bip44_path",
-		mkBip44Path, "masterkey_path_context",
-		mkPathContext, "op_bip44_path",
-		opBip44Path, "op_path_context",
-		opPathContext, "user_bip44_path",
-		userBip44Path, "user_path_context",
-		userPathContext,
-	)
+	log.Info("Genesis succeeded", "trace_id", traceId, "chain_code", chainCode, "key_type", keyType, "master_key_bip44_path", mkBip44Path, "master_key_path_context", mkPathContext, "op_bip44_path", opBip44Path, "op_path_context", opPathContext, "user_bip44_path", userBip44Path, "user_path_context", userPathContext)
 
 	// ========== 步骤 6: 返回响应 ==========
 	return &proto.GenesisResponse{
@@ -437,7 +427,7 @@ func (s *KeyCreatorService) derive(bip32Change *bip32.Key, accountIndex uint32, 
 		return nil, fmt.Errorf("failed to get public key bytes at accountIndex %d: %w", accountIndex, err)
 	}
 
-	log.Info("Derive child key success!", "bip44Path", bip44Path)
+	log.Info("Derive child key success!", "bip44_path", bip44Path)
 
 	return &proto.DerivedChildKey{
 		AddressIndex:      accountIndex,

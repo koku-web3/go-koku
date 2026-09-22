@@ -82,10 +82,7 @@ func (c *Client) Address() string {
 }
 
 func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string) (*GenesisResult, error) {
-	log.Info("KeyCreatorClient.Genesis",
-		"trace_id", traceID,
-		"chain_code", chainCode,
-		"key_type", keyType)
+	log.Info("KeyCreatorClient.Genesis", "trace_id", traceID, "chain_code", chainCode, "key_type", keyType)
 
 	if traceID == "" {
 		return nil, fmt.Errorf("trace_id is required")
@@ -103,7 +100,7 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 		KeyType:   keyType,
 	})
 	if err != nil {
-		log.Error("KeyCreatorClient.Genesis failed", "error", err, "trace_id", traceID)
+		log.Error("KeyCreatorClient.Genesis failed", "trace_id", traceID, "error", err.Error())
 		return nil, fmt.Errorf("keycreator Genesis failed: %w", err)
 	}
 
@@ -137,7 +134,7 @@ func (c *Client) CreateUserKey(ctx context.Context, traceID, chainCode, bip44Pat
 type createKeyFunc func(context.Context, *kvgrpc.CreateKeyRequest, ...grpc.CallOption) (*kvgrpc.CreateKeyResponse, error)
 
 func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, algoType string) (*CreateKeyResult, error) {
-	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", traceID, "chain_code", chainCode, "bip44Path", bip44Path, "account_index_start", accountIndexStart, "count", count)
+	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path, "account_index_start", accountIndexStart, "count", count)
 
 	if traceID == "" {
 		return nil, fmt.Errorf("trace_id is required")
@@ -159,7 +156,7 @@ func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc
 		KeyType:            algoType,
 	})
 	if err != nil {
-		log.Error(fmt.Sprintf("call key-creator server to creator %s Key failed", keyType), "error", err, "trace_id", traceID)
+		log.Error(fmt.Sprintf("Call key-creator server to create %s Key failed", keyType), "trace_id", traceID, "error", err.Error())
 		return nil, fmt.Errorf("call key-creator server to Create%sKey failed: %w", keyType, err)
 	}
 

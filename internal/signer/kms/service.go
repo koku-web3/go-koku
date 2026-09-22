@@ -197,7 +197,7 @@ func (k *KMS) Encrypt(transitName, keyName string, plaintext []byte, context str
 		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
 	}
 
-	log.Info("Call Vault Service", "path", encryptPath, "plaintextLength", len(plaintext), "contextLength", len(context))
+	log.Info("Call Vault Service", "path", encryptPath, "plaintext_length", len(plaintext), "context_length", len(context))
 	// 调用 Vault API 执行加密
 	secret, err := k.vault.GetClient().Logical().Write(encryptPath, payload)
 	if err != nil {

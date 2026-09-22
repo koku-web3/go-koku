@@ -93,7 +93,7 @@ func (s *transferService) checkBalance(ctx context.Context, in *types.UniversalT
 		return nil
 	}
 
-	log.Debug("check balance result", "trace_id", in.TraceID, "chain_code", in.ChainCode, "coin", in.Coin, "from", in.FromAddress, "amount", in.Amount, "contract", in.Contract, "coin_sufficient", res.IsCoinSufficient, "token_sufficient", res.IsTokenSufficient)
+	log.Warn("Insufficient balance detected", "trace_id", in.TraceID, "chain_code", in.ChainCode, "coin", in.Coin, "from_address", in.FromAddress, "amount", in.Amount, "contract", in.Contract, "coin_sufficient", res.IsCoinSufficient, "token_sufficient", res.IsTokenSufficient)
 
 	return fmt.Errorf("%s", strings.Join(msgs, "; "))
 }

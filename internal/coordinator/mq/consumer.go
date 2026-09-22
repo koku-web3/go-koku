@@ -138,8 +138,7 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 
 		msg, err := ParseMsg(d.Body)
 		if err != nil {
-			log.Error("parse msg failed, reject without requeue",
-				"queue", queueName, "error", err)
+			log.Error("Parse msg failed, reject without requeue", "queue", queueName, "error", err)
 			if nackErr := d.Nack(false, false); nackErr != nil {
 				log.Error("failed to nack message", "error", nackErr)
 			}
@@ -160,10 +159,7 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 			if ackErr := d.Ack(false); ackErr != nil {
 				log.Error("failed to ack message", "error", ackErr)
 			}
-			log.Info("msg processed successfully",
-				"trace_id", msg.TraceID, "biz_id", msg.BizID,
-				"chain_code", msg.ChainCode, "queue", queueName,
-				"elapsed_ms", elapsed.Milliseconds())
+			log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "elapsed_ms", elapsed.Milliseconds())
 			return rabbitmq.Ack
 		}
 
@@ -171,20 +167,14 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 			if nackErr := d.Nack(false, false); nackErr != nil {
 				log.Error("failed to nack message", "error", nackErr)
 			}
-			log.Error("msg processed failed (permanent), reject without requeue",
-				"trace_id", msg.TraceID, "biz_id", msg.BizID,
-				"queue", queueName, "error", err,
-				"elapsed_ms", elapsed.Milliseconds())
+			log.Error("Msg processed failed (permanent), reject without requeue", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "elapsed_ms", elapsed.Milliseconds())
 			return rabbitmq.NackDiscard
 		}
 
 		if nackErr := d.Nack(false, true); nackErr != nil {
 			log.Error("failed to nack message", "error", nackErr)
 		}
-		log.Error("msg processed failed (transient), requeue for retry",
-			"trace_id", msg.TraceID, "biz_id", msg.BizID,
-			"queue", queueName, "error", err,
-			"elapsed_ms", elapsed.Milliseconds())
+		log.Error("Msg processed failed (transient), requeue for retry", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "elapsed_ms", elapsed.Milliseconds())
 		return rabbitmq.NackRequeue
 	}
 

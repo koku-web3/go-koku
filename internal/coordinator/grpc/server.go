@@ -72,7 +72,7 @@ func (s *Server) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest)
 }
 
 func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
-	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode, "keyType", req.KeyType)
+	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode, "key_type", req.KeyType)
 
 	err := s.keySvc.Genesis(ctx, &types.GenesisInput{
 		TraceID:   req.TraceId,
@@ -80,14 +80,14 @@ func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto
 		KeyType:   req.KeyType,
 	})
 
-	log.Info("Genesis completed", "success", err == nil)
+	log.Debug("Genesis completed", "success", err == nil)
 	return &proto.GenesisResponse{Success: err == nil}, err
 }
 
 func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
 	log.Info("CreateOperationalKey ready", "trace_id", req.TraceId, "chain_code", req.ChainCode, "count", req.Count)
 
-	log.Info("CreateOperationalKey -> CreateKey", "trace_id", req.TraceId)
+	log.Debug("CreateOperationalKey -> CreateKey", "trace_id", req.TraceId)
 
 	result, err := s.keySvc.CreateKey(ctx, &types.CreateKeyInput{
 		TraceID:   req.TraceId,
@@ -98,7 +98,7 @@ func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyR
 	if err != nil {
 		log.Error("CreateOperationalKey failed", "trace_id", req.TraceId, "error", err.Error())
 	} else {
-		log.Info("CreateOperationalKey success", "trace_id", req.TraceId)
+		log.Debug("CreateOperationalKey success", "trace_id", req.TraceId)
 		log.Debug("CreateOperationalKey response", "trace_id", req.TraceId, "address_list", result)
 	}
 
@@ -118,7 +118,7 @@ func (s *Server) CreateUserKey(ctx context.Context, req *proto.CreateKeyRequest)
 		Count:     req.Count,
 	})
 
-	log.Info("CreateUserKey completed", "result", result, "error", err)
+	log.Debug("CreateUserKey completed", "trace_id", req.TraceId, "success", err == nil)
 	return &proto.CreateKeyResponse{
 		Success:     err == nil,
 		AddressList: result,
@@ -137,7 +137,7 @@ func (s *Server) VerifyAddress(ctx context.Context, req *proto.VerifyAddressRequ
 		return nil, err
 	}
 
-	log.Info("VerifyAddress completed", "is_valid", valid, "error", err)
+	log.Debug("VerifyAddress completed", "is_valid", valid)
 	return &proto.VerifyAddressResponse{IsValid: valid}, nil
 }
 
@@ -153,7 +153,7 @@ func (s *Server) VerifyContractAddress(ctx context.Context, req *proto.VerifyCon
 		return nil, err
 	}
 
-	log.Info("VerifyContractAddress completed", "is_valid", valid)
+	log.Debug("VerifyContractAddress completed", "is_valid", valid)
 	return &proto.VerifyContractAddressResponse{IsValid: valid}, nil
 }
 
@@ -173,7 +173,7 @@ func (s *Server) CheckSufficientBalance(ctx context.Context, req *proto.CheckSuf
 		return nil, err
 	}
 
-	log.Info("CheckSufficientBalance completed", "is_coin_sufficient", result.IsCoinSufficient, "is_token_sufficient", result.IsTokenSufficient)
+	log.Debug("CheckSufficientBalance completed", "is_coin_sufficient", result.IsCoinSufficient, "is_token_sufficient", result.IsTokenSufficient)
 	return &proto.CheckSufficientBalanceResponse{
 		IsCoinSufficient:  result.IsCoinSufficient,
 		IsTokenSufficient: result.IsTokenSufficient,

@@ -68,10 +68,10 @@ func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalT
 	})
 
 	if err == nil {
-		log.Info("UniversalTransferCallback", "success", true, "biz_id", msg.BizID, "tract_id", msg.TraceID, "tx_hash", result.TxHash)
+		log.Info("UniversalTransferCallback", "success", true, "biz_id", msg.BizID, "trace_id", msg.TraceID, "tx_hash", result.TxHash)
 		return nil
 	} else {
-		log.Info("UniversalTransferCallback", "success", false, "biz_id", msg.BizID, "tract_id", msg.TraceID, "error", err.Error())
+		log.Error("UniversalTransferCallback", "biz_id", msg.BizID, "trace_id", msg.TraceID, "error", err.Error())
 	}
 
 	if errors.Is(err, key.ErrInvalidParam) ||

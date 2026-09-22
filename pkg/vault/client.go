@@ -194,19 +194,17 @@ func (v *VaultClient) Authenticate() error {
 	// 函数返回前清理环境变量，防止凭证泄漏
 	defer func() {
 		if err := os.Unsetenv("AWS_ACCESS_KEY_ID"); err != nil {
-			log.Error("failed to unset AWS_ACCESS_KEY_ID", "error", err)
+			log.Error("Failed to unset AWS_ACCESS_KEY_ID", "error", err)
 		}
 		if err := os.Unsetenv("AWS_SECRET_ACCESS_KEY"); err != nil {
-			log.Error("failed to unset AWS_SECRET_ACCESS_KEY", "error", err)
+			log.Error("Failed to unset AWS_SECRET_ACCESS_KEY", "error", err)
 		}
 		if err := os.Unsetenv("AWS_SESSION_TOKEN"); err != nil {
-			log.Error("failed to unset AWS_SESSION_TOKEN", "error", err)
+			log.Error("Failed to unset AWS_SESSION_TOKEN", "error", err)
 		}
 	}()
 
-	log.Info("Authenticating with Vault",
-		"role_name", v.cfg.RoleName,
-		"mount_path", v.cfg.MountPath)
+	log.Info("Authenticating with Vault", "role_name", v.cfg.RoleName, "mount_path", v.cfg.MountPath)
 
 	// 创建 Vault AWS Auth 方法实例
 	// WithRole 指定 Vault 中配置的 AWS Auth Role 名称
@@ -243,12 +241,7 @@ func (v *VaultClient) Authenticate() error {
 	v.leaseTime = time.Now().Add(time.Duration(authInfo.Auth.LeaseDuration) * time.Second) // 计算过期时间
 	v.client.SetToken(v.token)                                                             // 同时更新 API 客户端的 token
 
-	log.Info("Vault authentication successful",
-		"token_id", authInfo.Auth.ClientToken,
-		"accessor", authInfo.Auth.Accessor,
-		"lease_duration", fmt.Sprintf("%ds", authInfo.Auth.LeaseDuration),
-		"refresh_interval", fmt.Sprintf("%ds", v.cfg.TokenRefreshInterval),
-		"policies", authInfo.Auth.Policies)
+	log.Info("Vault authentication successful", "token_id", authInfo.Auth.ClientToken, "accessor", authInfo.Auth.Accessor, "lease_duration", fmt.Sprintf("%ds", authInfo.Auth.LeaseDuration), "refresh_interval", fmt.Sprintf("%ds", v.cfg.TokenRefreshInterval), "policies", authInfo.Auth.Policies)
 	return nil
 }
 
