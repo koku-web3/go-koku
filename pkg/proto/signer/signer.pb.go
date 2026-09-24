@@ -110,6 +110,7 @@ type SignRequest struct {
 	KeyType           string                 `protobuf:"bytes,4,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`                                 // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 	Message           string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`                                                // 待签名数据，1-1024必填
 	PrivKeyCiphertext string                 `protobuf:"bytes,6,opt,name=priv_key_ciphertext,json=privKeyCiphertext,proto3" json:"priv_key_ciphertext,omitempty"` // 私钥密文，1-1024必填
+	DekCiphertext     string                 `protobuf:"bytes,7,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`               // DEK 数据加密密钥，用于信封加密
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -186,6 +187,13 @@ func (x *SignRequest) GetPrivKeyCiphertext() string {
 	return ""
 }
 
+func (x *SignRequest) GetDekCiphertext() string {
+	if x != nil {
+		return x.DekCiphertext
+	}
+	return ""
+}
+
 // 签名响应
 type SignResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -238,7 +246,7 @@ const file_proto_signer_proto_rawDesc = "" +
 	"\x12proto/signer.proto\x12\x06signer\"\x14\n" +
 	"\x12HealthCheckRequest\"-\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\xcb\x01\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xf2\x01\n" +
 	"\vSignRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
@@ -247,7 +255,8 @@ const file_proto_signer_proto_rawDesc = "" +
 	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12\x19\n" +
 	"\bkey_type\x18\x04 \x01(\tR\akeyType\x12\x18\n" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x12.\n" +
-	"\x13priv_key_ciphertext\x18\x06 \x01(\tR\x11privKeyCiphertext\",\n" +
+	"\x13priv_key_ciphertext\x18\x06 \x01(\tR\x11privKeyCiphertext\x12%\n" +
+	"\x0edek_ciphertext\x18\a \x01(\tR\rdekCiphertext\",\n" +
 	"\fSignResponse\x12\x1c\n" +
 	"\tsignature\x18\x01 \x01(\tR\tsignature2\xc0\x01\n" +
 	"\x06Signer\x12F\n" +

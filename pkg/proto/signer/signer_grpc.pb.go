@@ -32,11 +32,11 @@ const (
 type SignerClient interface {
 	// 健康检查
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
-	// 使用 BIP44 路径 Account=0 的子密钥签名消息
-	// 即使用运营密钥进行签名；场景：归集、出账
+	// 使用 BIP44 路径 Account=0(运营密钥) 的子密钥签名消息
+	// 场景：归集、出账
 	SignAcct0(ctx context.Context, in *SignRequest, opts ...grpc.CallOption) (*SignResponse, error)
-	// 使用 BIP44 路径 Account=1 的子密钥签名消息
-	// 使用用户密钥进行签名出账；场景：归集
+	// 使用 BIP44 路径 Account=1(用户密钥) 的子密钥签名消息
+	// 场景：归集
 	SignAcct1(ctx context.Context, in *SignRequest, opts ...grpc.CallOption) (*SignResponse, error)
 }
 
@@ -86,11 +86,11 @@ func (c *signerClient) SignAcct1(ctx context.Context, in *SignRequest, opts ...g
 type SignerServer interface {
 	// 健康检查
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
-	// 使用 BIP44 路径 Account=0 的子密钥签名消息
-	// 即使用运营密钥进行签名；场景：归集、出账
+	// 使用 BIP44 路径 Account=0(运营密钥) 的子密钥签名消息
+	// 场景：归集、出账
 	SignAcct0(context.Context, *SignRequest) (*SignResponse, error)
-	// 使用 BIP44 路径 Account=1 的子密钥签名消息
-	// 使用用户密钥进行签名出账；场景：归集
+	// 使用 BIP44 路径 Account=1(用户密钥) 的子密钥签名消息
+	// 场景：归集
 	SignAcct1(context.Context, *SignRequest) (*SignResponse, error)
 	mustEmbedUnimplementedSignerServer()
 }

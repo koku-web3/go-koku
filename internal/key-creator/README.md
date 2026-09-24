@@ -25,13 +25,16 @@ KeyCreator 基于 BIP-44 HD 密钥派生标准，通过以下流程生成密钥�
 
 1. 生成随机 BIP-32 主密钥种子
 2. 从种子派生出 `m/44'/coinType'/0'/0/0` (运营密钥) 和 `m/44'/coinType'/1'/0/0` (用户密钥)
-3. 使用 HashiCorp Vault Transit Engine 对所有私钥进行加密存储
-4. 后续密钥派生时，从 Vault 解密父密钥，派生子密钥后重新加密
+3. 使用信封加密方案对所有私钥进行加密存储：
+   - 调用 Vault Transit datakey/plaintext 获取 DEK (Data Encryption Key)
+   - 使用 DEK 和 AES-256-GCM 本地加密私钥
+   - 存储信封密文 (nonce || encrypted) 和 DEK 密文到数据库
+4. 后续密钥派生时，从 Vault 解密 DEK，再用 DEK 解密父密钥，派生子密钥后重新使用信封加密
 
 **安全特性**：
 
 - **内存安全**：所有私钥明文仅在 KeyCreator 内存中短暂存在，操作完成后立即擦除
-- **Vault 加密**：所有密钥使用 Vault Transit Engine 加密存储
+- **信封加密**：使用 Vault datakey + AES-256-GCM 本地加密，平衡安全与性能
 - **mTLS 认证**：gRPC 通信使用双向 TLS 认证
 - **幂等操作**：密钥创建操作具有幂等性，重复创建不会产生错误
 
@@ -141,17 +144,19 @@ message GenesisRequest {
 
 ```protobuf
 message GenesisResponse {
-  string bip32key_ciphertext = 1; // 加密后的 BIP-32 主密钥密文 (base64)
+  string bip32key_ciphertext = 1; // 加密后的 BIP-32 主密钥密文 (base64: nonce || encrypted)
+  string dek_ciphertext = 5;      // DEK 密文 (vault:v1:...)
   string context = 2;            // 密钥派生上下文标识符
-  string bip44_path = 3;          // BIP-44 路径字符串，如 m/44'/60'/0'
+  string bip44_path = 3;         // BIP-44 路径字符串，如 m/44'/60'/0'
   repeated DerivedCoreKey derived_keys = 4; // 派生的核心密钥列表
 }
 
 message DerivedCoreKey {
   uint32 key_usage = 1;           // 0=运营密钥，1=用户密钥
-  string bip32key_ciphertext = 2; // 加密后的密钥密文 (base64)
-  string context = 3;            // 密钥派生上下文标识符
-  string bip44_path = 4;         // BIP-44 路径字符串
+  string bip32key_ciphertext = 2; // 加密后的密钥密文 (base64: nonce || encrypted)
+  string dek_ciphertext = 5;      // DEK 密文 (vault:v1:...)
+  string context = 3;              // 密钥派生上下文标识符
+  string bip44_path = 4;          // BIP-44 路径字符串
 }
 ```
 
@@ -178,24 +183,30 @@ grpcurl -plaintext -d '{"trace_id":"tx-001","chain_code":"ethereum","key_type":"
 
 ```json
 {
-    "bip32key_ciphertext": "vault:v1:abc123...",
+    "bip32key_ciphertext": "YWJjZGVmZ2hpamtsbW5vcA==...",
+    "dek_ciphertext": "vault:v1:abc123...",
     "context": "m-44-60-0",
     "bip44_path": "m/44'/60'/0'",
     "derived_keys": [
         {
             "key_usage": 0,
-            "bip32key_ciphertext": "vault:v1:def456...",
+            "bip32key_ciphertext": "b25l dHdvIHRocmVlIGZvdXI="...",
+            "dek_ciphertext": "vault:v1:def456...",
             "context": "m-44-60-0-0",
             "bip44_path": "m/44'/60'/0'/0/0"
         },
         {
             "key_usage": 1,
-            "bip32key_ciphertext": "vault:v1:ghi789...",
+            "bip32key_ciphertext": "Zm91ciBmaXZlIHNpeCBzZXZlbg==...",
+            "dek_ciphertext": "vault:v1:ghi789...",
             "context": "m-44-60-1-0",
             "bip44_path": "m/44'/60'/1'/0/0"
         }
     ]
 }
+```
+
+> **信封加密格式**: `bip32key_ciphertext` 字段存储格式为 `base64(nonce || encrypted)`，其中 nonce 固定 12 字节。
 ```
 
 ---
@@ -228,11 +239,12 @@ message CreateKeyResponse {
 }
 
 message DerivedChildKey {
-  string priv_key_ciphertext = 1; // 加密后的私钥 (PKCS8 DER, base64)
+  string priv_key_ciphertext = 1; // 加密后的私钥 (PKCS8 DER, base64: nonce || encrypted)
   string public_key = 2;        // 公钥 (PKIX PEM 格式)
   uint32 address_index = 3;     // 地址索引
   string context = 4;           // 密钥派生上下文标识符
   string bip44_path = 5;        // BIP-44 路径字符串
+  string dek_ciphertext = 6;   // DEK 密文 (vault:v1:...)
 }
 ```
 
@@ -256,14 +268,16 @@ grpcurl -plaintext -d '{
 {
     "keys": [
         {
-            "priv_key_ciphertext": "vault:v1:abc...",
+            "priv_key_ciphertext": "YWJjZGVmZ2hpamtsbW5vcA==...",
             "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA...\n-----END PUBLIC KEY-----",
             "address_index": 0,
             "context": "m-44-60-0-0-0",
-            "bip44_path": "m/44'/60'/0'/0/0"
+            "bip44_path": "m/44'/60'/0'/0/0",
+            "dek_ciphertext": "vault:v1:abc..."
         }
     ]
 }
+```
 ```
 
 ---
@@ -409,8 +423,24 @@ Vault Transit Engine 使用以下密钥命名规范：
 KeyCreator 遵循 FINANCE 安全标准：
 
 1. **私钥明文保护**：所有私钥明文仅在 KeyCreator 内存中短暂存在
-2. **内存清零**：使用 `securestore.Memzero`* 函数在函数返回前清零敏感数据
+2. **内存清零**：使用 `securestore.Memzero` 函数在函数返回前清零敏感数据
 3. **SecurePrivateKey**：自动在垃圾回收时清零私钥内存
-4. **Vault 加密**：所有密钥使用 Vault Transit Engine 加密存储
+4. **信封加密**：使用 Vault datakey + AES-256-GCM 本地加密
 5. **幂等操作**：密钥创建操作具有幂等性
+
+### 3.1 信封加密方案
+
+```
+加密流程：
+1. 调用 Vault Transit datakey/plaintext/{keyName} 获取 DEK (plaintext + ciphertext)
+2. 使用 DEK plaintext + AES-256-GCM 加密私钥
+3. 组装信封: base64(nonce || encrypted)
+4. 存储信封密文和 DEK ciphertext
+
+解密流程（Signer）：
+1. 调用 Vault Transit decrypt 解密 DEK ciphertext 获取 DEK plaintext
+2. base64 解码信封，提取 nonce 和 encrypted
+3. 使用 DEK plaintext + AES-256-GCM 解密获取私钥
+4. 清零所有敏感内存
+```
 

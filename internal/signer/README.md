@@ -17,8 +17,8 @@ Signer 是签名服务，负责区块链交易的签名操作。它的职责很�
 
 Signer 由 Coordinator 调用，完成区块链交易签名的最后一步：
 
-1. **Coordinator** 协调 TxBuilder 构造交易，得到代签名数据，并从数据库查询私钥密文
-2. **Signer** 接收签名请求，调用 KMS（Vault Transit Engine） 对私钥密文进行解密
+1. **Coordinator** 协调 TxBuilder 构造交易，得到代签名数据，并从数据库查询私钥密文和 DEK（Data Encryption Key） 密文
+2. **Signer** 接收签名请求，调用 KMS（Vault Transit Engine）解密 DEK，再用 DEK 解密私钥信封
 3. **Signer** 使用对应算法签名，私钥明文用完后立即擦除内存
 4. **Signer** 返回签名结果给 Coordinator
 5. **Coordinator** 将签名数据回传 TxBuilder 广播交易
@@ -116,12 +116,13 @@ message HealthCheckResponse { string status = 1; }
 
 ```protobuf
 message SignRequest {
-  string trace_id = 1;             // 链路跟踪 ID，1-36 必填
-  string chain_code = 2;           // 区块链代码，1-36 必填
+  string trace_id = 1;              // 链路跟踪 ID，1-36 必填
+  string chain_code = 2;            // 区块链代码，1-36 必填
   string bip44_path = 3;           // BIP-44 路径字符串，格式：m/44'/60'/0'/0/0
   string key_type = 4;             // 密钥类型，如 ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36 必填
-  string message = 5;              // 待签名数据（十六进制格式），1-1024 必填
-  string priv_key_ciphertext = 6;  // 私钥密文（Vault 加密），1-1024 必填
+  string message = 5;               // 待签名数据（十六进制格式），1-1024 必填
+  string priv_key_ciphertext = 6;    // 私钥信封密文 (base64: nonce || encrypted)，1-1024 必填
+  string dek_ciphertext = 7;        // DEK 密文 (vault:v1:...)，必填
 }
 ```
 
@@ -139,10 +140,11 @@ message SignResponse {
 grpcurl -plaintext -d '{
   "trace_id": "tx-001",
   "chain_code": "ethereum",
-  "bip44_path": "m/44'/60'/0'/0/0",
+  "bip44_path": "m/44'\''/60'\''/0'\''/0/0",
   "key_type": "ecdsa-secp256k1",
   "message": "1a2b3c4d5e6f...",
-  "priv_key_ciphertext": "vault:v1:ABC123..."
+  "priv_key_ciphertext": "YWJjZGVmZ2hpamtsbW5vcA==...",
+  "dek_ciphertext": "vault:v1:ABC123..."
 }' localhost:50052 signer.Signer/SignAcct0
 ```
 
@@ -170,10 +172,11 @@ grpcurl -plaintext -d '{
 grpcurl -plaintext -d '{
   "trace_id": "tx-002",
   "chain_code": "ethereum",
-  "bip44_path": "m/44'/60'/1'/0/0",
+  "bip44_path": "m/44'\''/60'\''/1'\''/0/0",
   "key_type": "ecdsa-secp256k1",
   "message": "7a8b9c0d...",
-  "priv_key_ciphertext": "vault:v1:XYZ789..."
+  "priv_key_ciphertext": "b25lIHR3byB0aHJlZSBmb3Vy...",
+  "dek_ciphertext": "vault:v1:XYZ789..."
 }' localhost:50052 signer.Signer/SignAcct1
 ```
 
@@ -224,7 +227,8 @@ func main() {
         Bip44Path:          "m/44'/60'/0'/0/0",
         KeyType:            "ecdsa-secp256k1",
         Message:            "1a2b3c4d5e6f...",
-        PrivKeyCiphertext:  "vault:v1:ABC123...",
+        PrivKeyCiphertext:  "YWJjZGVmZ2hpamtsbW5vcA==...",
+        DekCiphertext:      "vault:v1:ABC123...",
     })
     if err != nil {
         panic(err)
@@ -238,7 +242,8 @@ func main() {
         Bip44Path:          "m/44'/60'/1'/0/0",
         KeyType:            "ecdsa-secp256k1",
         Message:            "7a8b9c0d...",
-        PrivKeyCiphertext:  "vault:v1:XYZ789...",
+        PrivKeyCiphertext:  "b25lIHR3byB0aHJlZSBmb3Vy...",
+        DekCiphertext:      "vault:v1:XYZ789...",
     })
     if err != nil {
         panic(err)
@@ -262,7 +267,8 @@ grpcurl -plaintext -d '{
   "bip44_path": "m/44'\''/60'\''/0'\''/0/0",
   "key_type": "ecdsa-secp256k1",
   "message": "1a2b3c4d5e6f...",
-  "priv_key_ciphertext": "vault:v1:ABC123..."
+  "priv_key_ciphertext": "YWJjZGVmZ2hpamtsbW5vcA==...",
+  "dek_ciphertext": "vault:v1:ABC123..."
 }' localhost:50052 signer.Signer/SignAcct0
 
 # 用户密钥签名（Account=1）
@@ -272,7 +278,8 @@ grpcurl -plaintext -d '{
   "bip44_path": "m/44'\''/60'\''/1'\''/0/0",
   "key_type": "ecdsa-secp256k1",
   "message": "7a8b9c0d...",
-  "priv_key_ciphertext": "vault:v1:XYZ789..."
+  "priv_key_ciphertext": "b25lIHR3byB0aHJlZSBmb3Vy...",
+  "dek_ciphertext": "vault:v1:XYZ789..."
 }' localhost:50052 signer.Signer/SignAcct1
 ```
 
@@ -287,12 +294,14 @@ grpcurl -plaintext -d '{
 ### 2.1 签名流程
 
 ```
-1. 接收 SignRequest（含 chainCode、bip44Path、keyType、message、privKeyCiphertext）
+1. 接收 SignRequest（含 chainCode、bip44Path、keyType、message、privKeyCiphertext、dekCiphertext）
 2. 通过 keyType 获取对应的算法服务（algorithm）
-3. 通过 KMS.Decrypt 解密私钥密文（调用 Vault Transit Engine）
-4. 使用 algorithm 算法服务对消息进行签名
-5. 立即清零私钥明文内存（Memzero + ClearPrivateKey）
-6. 返回签名结果（十六进制格式）
+3. 通过 KMS.DecryptDataKey 解密 DEK ciphertext 获取 DEK plaintext
+4. 解析 privKeyCiphertext 信封: base64(nonce || encrypted)
+5. 使用 DEK plaintext + AES-256-GCM 解密私钥
+6. 使用 algorithm 算法服务对消息进行签名
+7. 立即清零私钥明文内存（Memzero + ClearPrivateKey）
+8. 返回签名结果（十六进制格式）
 ```
 
 
@@ -320,7 +329,7 @@ grpcurl -plaintext -d '{
 
 - **最小暴露原则**：私钥明文仅在签名瞬间存在于内存，签名完成后立即清零
 - **内存清零**：使用 `Memzero` 和 `ClearPrivateKey` 双重清零敏感数据
-- **Vault Transit Engine**：所有密钥静态加密存储，按需解密使用
+- **信封加密**：使用 Vault datakey + AES-256-GCM 解密，无需暴露 DEK
 - **BIP-44 派生**：支持无限子密钥派生，无需暴露主密钥
 
 

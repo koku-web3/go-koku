@@ -17,6 +17,12 @@ type KMS struct {
 	vault *vault.VaultClient
 }
 
+// DataKey 数据加密密钥结构体
+type DataKey struct {
+	Plaintext  string // base64 编码的 DEK 明文
+	Ciphertext string // DEK 密文 (带 vault:v1: 前缀)
+}
+
 func NewKMS(ctx context.Context, vaultCfg *config.VaultConfig, awsCfg *config.AWSConfig) (*KMS, error) {
 	// 1. 初始化 VaultClient
 	vc, err := vault.NewVaultClient(&vault.Cfg{
@@ -226,6 +232,106 @@ func isKeyExistsError(err error) bool {
 		return false
 	}
 	errStr := err.Error()
-	// 检查错误信息中是否包含 "already exists" 或 HTTP 400 状态码
 	return strings.Contains(errStr, "already exists") || strings.Contains(errStr, "400")
+}
+
+// GenerateDataKey 调用 Vault Transit datakey/plaintext/{keyName} 批量生成 DEK
+// transitName: transit引擎名称 (core/operations/user)
+// keyName: 密钥名称 (如 ethereum-masterkey)
+// context: 密钥派生上下文
+// count: 批量生成数量（建议单次不超过100）
+// 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀), 错误
+func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32) (datakeys []DataKey, err error) {
+	if strings.TrimSpace(transitName) == "" {
+		return nil, fmt.Errorf("transitName cannot be empty")
+	}
+	if strings.TrimSpace(keyName) == "" {
+		return nil, fmt.Errorf("keyName cannot be empty")
+	}
+	if strings.TrimSpace(context) == "" {
+		return nil, fmt.Errorf("context cannot be empty")
+	}
+	// 统一使用 batch endpoint: /transit/datakeys/plaintext/:name
+	// 即使 count=1 也使用 batch endpoint，返回 key_pairs 数组
+	datakeyPath := fmt.Sprintf("transit/%s/datakeys/plaintext/%s", transitName, keyName)
+
+	payload := map[string]interface{}{
+		"plaintext": base64.StdEncoding.EncodeToString([]byte("generated-datakey")),
+		"count":     count,
+	}
+
+	log.Debug("Generate data key from Vault", "path", datakeyPath, "count", count, "context_length", len(context))
+	secret, err := k.vault.GetClient().Logical().Write(datakeyPath, payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate data key: %w", err)
+	}
+
+	if secret == nil || secret.Data == nil {
+		return nil, fmt.Errorf("Vault response is empty")
+	}
+
+	keyPairsRaw, ok := secret.Data["key_pairs"]
+	if !ok {
+		return nil, fmt.Errorf("missing key_pairs in data key response")
+	}
+
+	keyPairs, ok := keyPairsRaw.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid key_pairs format in data key response")
+	}
+
+	datakeys = make([]DataKey, 0, len(keyPairs))
+	for _, kp := range keyPairs {
+		kpMap, ok := kp.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid key_pair format in data key response")
+		}
+
+		plaintext, ok := kpMap["plaintext"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid plaintext format in key_pair")
+		}
+		ciphertext, ok := kpMap["ciphertext"].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid ciphertext format in key_pair")
+		}
+		datakeys = append(datakeys, DataKey{Plaintext: plaintext, Ciphertext: ciphertext})
+	}
+
+	return datakeys, nil
+}
+
+// DecryptDataKey 使用 Vault Transit 解密 DEK ciphertext
+// transitName: transit引擎名称
+// keyName: 密钥名称
+// ciphertext: GenerateDataKey返回的ciphertext
+// context: 密钥派生上下文
+// 返回: plaintext (base64 DEK明文), 错误
+func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (string, error) {
+	decryptPath := fmt.Sprintf("transit/%s/decrypt/%s", transitName, keyName)
+
+	payload := map[string]interface{}{
+		"ciphertext": ciphertext,
+	}
+
+	if context != "" {
+		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
+	}
+
+	log.Debug("Decrypt data key via Vault", "path", decryptPath, "context_length", len(context))
+	secret, err := k.vault.GetClient().Logical().Write(decryptPath, payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt data key: %w", err)
+	}
+
+	if secret == nil || secret.Data == nil {
+		return "", fmt.Errorf("Vault response is empty")
+	}
+
+	plaintext, ok := secret.Data["plaintext"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid plaintext format in data key decrypt response")
+	}
+
+	return plaintext, nil
 }

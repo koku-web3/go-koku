@@ -108,6 +108,7 @@ type DerivedCoreKey struct {
 	Bip32KeyCiphertext string                 `protobuf:"bytes,2,opt,name=bip32key_ciphertext,json=bip32keyCiphertext,proto3" json:"bip32key_ciphertext,omitempty"` // 加密后的bip32主密钥 hex 格式
 	Context            string                 `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`                                                 // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
 	Bip44Path          string                 `protobuf:"bytes,4,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                            // BIP-44 路径字符串
+	DekCiphertext      string                 `protobuf:"bytes,5,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`                // DEK 数据加密密钥，用于信封加密
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -170,6 +171,13 @@ func (x *DerivedCoreKey) GetBip44Path() string {
 	return ""
 }
 
+func (x *DerivedCoreKey) GetDekCiphertext() string {
+	if x != nil {
+		return x.DekCiphertext
+	}
+	return ""
+}
+
 type DerivedChildKey struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	PrivKeyCiphertext string                 `protobuf:"bytes,1,opt,name=priv_key_ciphertext,json=privKeyCiphertext,proto3" json:"priv_key_ciphertext,omitempty"` // 加密后的 DER 格式密钥，返回base64编码格式
@@ -177,6 +185,7 @@ type DerivedChildKey struct {
 	AddressIndex      uint32                 `protobuf:"varint,3,opt,name=address_index,json=addressIndex,proto3" json:"address_index,omitempty"`                 // 地址索引
 	Context           string                 `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`                                                // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
 	Bip44Path         string                 `protobuf:"bytes,5,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                           // BIP-44 路径字符串
+	DekCiphertext     string                 `protobuf:"bytes,6,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`               // DEK 数据加密密钥，用于信封加密
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -246,6 +255,13 @@ func (x *DerivedChildKey) GetBip44Path() string {
 	return ""
 }
 
+func (x *DerivedChildKey) GetDekCiphertext() string {
+	if x != nil {
+		return x.DekCiphertext
+	}
+	return ""
+}
+
 type GenesisRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`       // 链路跟踪ID，必填
@@ -311,7 +327,8 @@ type GenesisResponse struct {
 	Bip32KeyCiphertext string                 `protobuf:"bytes,1,opt,name=bip32key_ciphertext,json=bip32keyCiphertext,proto3" json:"bip32key_ciphertext,omitempty"` // 加密后的bip32主密钥 hex 格式
 	Context            string                 `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`                                                 // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
 	Bip44Path          string                 `protobuf:"bytes,3,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                            // BIP-44 路径字符串
-	DerivedKeys        []*DerivedCoreKey      `protobuf:"bytes,4,rep,name=derived_keys,json=derivedKeys,proto3" json:"derived_keys,omitempty"`                      // 派生的密钥列表 (运营账户和用户账户)
+	DekCiphertext      string                 `protobuf:"bytes,4,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`                // DEK 数据加密密钥，用于信封加密
+	DerivedKeys        []*DerivedCoreKey      `protobuf:"bytes,5,rep,name=derived_keys,json=derivedKeys,proto3" json:"derived_keys,omitempty"`                      // 派生的密钥列表 (运营账户和用户账户)
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -363,6 +380,13 @@ func (x *GenesisResponse) GetContext() string {
 func (x *GenesisResponse) GetBip44Path() string {
 	if x != nil {
 		return x.Bip44Path
+	}
+	return ""
+}
+
+func (x *GenesisResponse) GetDekCiphertext() string {
+	if x != nil {
+		return x.DekCiphertext
 	}
 	return ""
 }
@@ -518,13 +542,14 @@ const file_proto_keycreator_proto_rawDesc = "" +
 	"keycreator\"\x14\n" +
 	"\x12HealthCheckRequest\"-\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\x97\x01\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xbe\x01\n" +
 	"\x0eDerivedCoreKey\x12\x1b\n" +
 	"\tkey_usage\x18\x01 \x01(\rR\bkeyUsage\x12/\n" +
 	"\x13bip32key_ciphertext\x18\x02 \x01(\tR\x12bip32keyCiphertext\x12\x18\n" +
 	"\acontext\x18\x03 \x01(\tR\acontext\x12\x1d\n" +
 	"\n" +
-	"bip44_path\x18\x04 \x01(\tR\tbip44Path\"\xbe\x01\n" +
+	"bip44_path\x18\x04 \x01(\tR\tbip44Path\x12%\n" +
+	"\x0edek_ciphertext\x18\x05 \x01(\tR\rdekCiphertext\"\xe5\x01\n" +
 	"\x0fDerivedChildKey\x12.\n" +
 	"\x13priv_key_ciphertext\x18\x01 \x01(\tR\x11privKeyCiphertext\x12\x1d\n" +
 	"\n" +
@@ -532,18 +557,20 @@ const file_proto_keycreator_proto_rawDesc = "" +
 	"\raddress_index\x18\x03 \x01(\rR\faddressIndex\x12\x18\n" +
 	"\acontext\x18\x04 \x01(\tR\acontext\x12\x1d\n" +
 	"\n" +
-	"bip44_path\x18\x05 \x01(\tR\tbip44Path\"e\n" +
+	"bip44_path\x18\x05 \x01(\tR\tbip44Path\x12%\n" +
+	"\x0edek_ciphertext\x18\x06 \x01(\tR\rdekCiphertext\"e\n" +
 	"\x0eGenesisRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
 	"chain_code\x18\x02 \x01(\tR\tchainCode\x12\x19\n" +
-	"\bkey_type\x18\x03 \x01(\tR\akeyType\"\xba\x01\n" +
+	"\bkey_type\x18\x03 \x01(\tR\akeyType\"\xe1\x01\n" +
 	"\x0fGenesisResponse\x12/\n" +
 	"\x13bip32key_ciphertext\x18\x01 \x01(\tR\x12bip32keyCiphertext\x12\x18\n" +
 	"\acontext\x18\x02 \x01(\tR\acontext\x12\x1d\n" +
 	"\n" +
-	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12=\n" +
-	"\fderived_keys\x18\x04 \x03(\v2\x1a.keycreator.DerivedCoreKeyR\vderivedKeys\"\xfd\x01\n" +
+	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12%\n" +
+	"\x0edek_ciphertext\x18\x04 \x01(\tR\rdekCiphertext\x12=\n" +
+	"\fderived_keys\x18\x05 \x03(\v2\x1a.keycreator.DerivedCoreKeyR\vderivedKeys\"\xfd\x01\n" +
 	"\x10CreateKeyRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +

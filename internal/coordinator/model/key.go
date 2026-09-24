@@ -41,6 +41,7 @@ type CoreKey struct {
 	ChainCode          string    `gorm:"type:varchar(36);uniqueIndex:idx_chain_usage;not null;comment:区块链代码" json:"chain_code"`
 	KeyUsage           uint8     `gorm:"type:tinyint;uniqueIndex:idx_chain_usage;not null;comment:0=OPERATIONAL, 1=USER" json:"key_usage"`
 	Bip32KeyCiphertext string    `gorm:"type:text;not null;comment:加密后的bip32主密钥 hex 格式" json:"bip32key_ciphertext"`
+	DEK_Ciphertext     string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
 	Context            string    `gorm:"type:varchar(128);not null;comment:密钥派生上下文标识符, 1-36必填, 唯一" json:"context"`
 	Bip44Path          string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径字符串" json:"bip44_path"`
 	CreatedAt          time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -59,6 +60,7 @@ type MasterKey struct {
 	ChainCode          string    `gorm:"type:varchar(36);uniqueIndex;not null" json:"chain_code"`
 	KeyType            string    `gorm:"type:varchar(36);not null;comment:密钥类型，如 ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519" json:"key_type"`
 	Bip32KeyCiphertext string    `gorm:"type:text;not null;comment:加密后的bip32主密钥 hex 格式" json:"bip32key_ciphertext"`
+	DEK_Ciphertext     string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
 	Context            string    `gorm:"type:varchar(128);not null;comment:密钥派生上下文标识符, 1-36必填, 唯一" json:"context"`
 	Bip44Path          string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径字符串" json:"bip44_path"`
 	CreatedAt          time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -73,18 +75,19 @@ func (MasterKey) TableName() string {
 // ChindKey 子密钥表
 // 存储从主密钥派生的子密钥的加密私钥和公钥
 type ChindKey struct {
-	ID           uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ChainCode    string    `gorm:"type:varchar(36);index:idx_chain_usage;not null;comment:链代码: ethereum, bitcoin 等" json:"chain_code"`
-	KeyUsage     uint8     `gorm:"type:tinyint;index:idx_chain_usage;not null;comment:0=OPERATIONAL, 1=USER, 2=BACKUP" json:"key_usage"`
-	AccountIndex uint32    `gorm:"not null;default:0;comment:账户索引, 对应Bip44的account_index层级" json:"account_index"`
-	BIP44Path    string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径: m/44'/60'/0'/1/0" json:"bip44_path"`
-	KeyContext   string    `gorm:"type:varchar(128);not null;comment:Base64(SHA256(bip44_path)) 用于 Vault context" json:"key_context"`
-	Ciphertext   string    `gorm:"type:text;not null;comment:加密后的 DER 格式密钥, 返回base64编码格式" json:"ciphertext"`
-	PublicKey    string    `gorm:"type:varchar(256);not null;comment:公钥 (Hex)" json:"public_key"`
-	KeyAddress   string    `gorm:"type:varchar(128);not null;comment:地址" json:"key_address"`
-	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-	IsDeleted    bool      `gorm:"default:false;comment:软删除标记" json:"is_deleted"`
+	ID             uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	ChainCode      string    `gorm:"type:varchar(36);index:idx_chain_usage;not null;comment:链代码: ethereum, bitcoin 等" json:"chain_code"`
+	KeyUsage       uint8     `gorm:"type:tinyint;index:idx_chain_usage;not null;comment:0=OPERATIONAL, 1=USER, 2=BACKUP" json:"key_usage"`
+	AccountIndex   uint32    `gorm:"not null;default:0;comment:账户索引, 对应Bip44的account_index层级" json:"account_index"`
+	BIP44Path      string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径: m/44'/60'/0'/1/0" json:"bip44_path"`
+	KeyContext     string    `gorm:"type:varchar(128);not null;comment:Base64(SHA256(bip44_path)) 用于 Vault context" json:"key_context"`
+	Ciphertext     string    `gorm:"type:text;not null;comment:加密后的 DER 格式密钥, 返回base64编码格式" json:"ciphertext"`
+	DEK_Ciphertext string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
+	PublicKey      string    `gorm:"type:varchar(256);not null;comment:公钥 (Hex)" json:"public_key"`
+	KeyAddress     string    `gorm:"type:varchar(128);not null;comment:地址" json:"key_address"`
+	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	IsDeleted      bool      `gorm:"default:false;comment:软删除标记" json:"is_deleted"`
 }
 
 func (ChindKey) TableName() string {

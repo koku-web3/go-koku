@@ -36,6 +36,7 @@ message SignRequest {
   string key_type = 4; // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
   string message = 5; // 待签名数据，1-1024必填
   string priv_key_ciphertext = 6; // 私钥密文，1-1024必填
+  string dek_ciphertext = 7; // DEK 数据加密密钥，用于信封加密
 }
 
 // 签名响应

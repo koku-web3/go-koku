@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/koku-web3/go-koku/internal/signer/kms"
+	aead "github.com/koku-web3/go-koku/pkg/crypto"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	proto "github.com/koku-web3/go-koku/pkg/proto/signer"
 	"github.com/koku-web3/go-koku/pkg/securestore"
@@ -102,11 +103,11 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	res, err := s.sign(transitName, getKeyName(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext)
+	res, err := s.sign(transitName, getKeyName(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext, req.DekCiphertext)
 	if err != nil {
 		return nil, fmt.Errorf("trace_id=%s, sign failed: %w", req.TraceId, err)
 	}
-	log.Info(methodName+" succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "signature", res.Signature)
+	log.Info(methodName+" succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path)
 
 	return res, nil
 }
@@ -114,7 +115,7 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 // sign 消息签名
 // 流程：
 // 1. 通过 keyType 获取对应的算法服务 algo
-// 2. 用 s.kmsServ.Decrypt 解密私钥
+// 2. 用 s.kmsServ.DecryptDataKey 解密 DEK，然后用 DEK 解密私钥信封
 // 3. 使用对应的 algo 算法服务对消息进行签名
 // 4. 立即清零私钥明文
 //
@@ -122,7 +123,7 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 // - 私钥明文仅在签名操作期间存在于内存
 // - 签名完成后立即清零
 // - 所有签名操作都会记录到审计日志
-func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, privKeyCiphertext string) (*proto.SignResponse, error) {
+func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string) (*proto.SignResponse, error) {
 	msgBytes, err := hex.DecodeString(message)
 	if err != nil {
 		return nil, fmt.Errorf("decode hex message from string to bytes failed: %s", err.Error())
@@ -134,12 +135,34 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 		return nil, fmt.Errorf("unsupported key type for signing: %s", keyType)
 	}
 
-	plaintext, err := s.kmsServ.Decrypt(transitName, keyName, privKeyCiphertext, transit.Bip44PathToContext(bip44Path))
+	context := transit.Bip44PathToContext(bip44Path)
+
+	// 解密 DEK
+	dekPlaintext, err := s.kmsServ.DecryptDataKey(transitName, keyName, dekCiphertext, context)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt data key failed: %w", err)
+	}
+
+	dekBytes, err := base64.StdEncoding.DecodeString(dekPlaintext)
+	if err != nil {
+		return nil, fmt.Errorf("decode DEK from base64 failed: %w", err)
+	}
+	defer securestore.Memzero(dekBytes)
+
+	// 解密私钥信封: base64(nonce || encrypted)
+	envelopeBytes, err := base64.StdEncoding.DecodeString(privKeyCiphertext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt private key: %w", err)
 	}
 
-	privateDER, err := base64.StdEncoding.DecodeString(plaintext)
+	if len(envelopeBytes) < aead.NonceSize {
+		return nil, fmt.Errorf("invalid envelope bytes length")
+	}
+
+	nonce := envelopeBytes[:aead.NonceSize]
+	encrypted := envelopeBytes[aead.NonceSize:]
+
+	privateDER, err := aead.Decrypt(encrypted, nonce, dekBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 string:%w", err)
 	}
