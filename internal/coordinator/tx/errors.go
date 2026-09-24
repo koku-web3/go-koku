@@ -3,10 +3,10 @@ package tx
 import "errors"
 
 var (
-	ErrInvalidParam        = errors.New("invalid param")
-	ErrKeyNotFound         = errors.New("key not found")
-	ErrBroadcastFailed     = errors.New("broadcast failed")
-	ErrSignFailed          = errors.New("sign failed")
-	ErrNetwork             = errors.New("network error")
-	ErrInsufficientBalance = errors.New("insufficient balance")
+	ErrInvalidParam        = errors.New("Invalid param")
+	ErrKeyNotFound         = errors.New("Key not found")
+	ErrBroadcastFailed     = errors.New("Broadcast failed")
+	ErrSignFailed          = errors.New("Sign failed")
+	ErrNetwork             = errors.New("Network error")
+	ErrInsufficientBalance = errors.New("Insufficient balance")
 )

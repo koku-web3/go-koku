@@ -12,7 +12,11 @@
 #   │   ├── keycreator.pem/.key      # key-creator 服务端证书,同时作为客户端的证书
 #   │   ├── signer.pem/.key          # signer 服务端证书,同时作为客户端的证书
 #   │   └── coordinator.pem/.key      # coordinator 服务端证书,同时作为客户端的证书
-#
+#   internal/
+#   ├── kms-vault/vault-deploy/local-config/certs/
+#   │                                       ├── ca.pem     # 从 certs/ca 拷贝
+#   │                                       ├── vault.key  # Vault 节点间通信 服务端证书对应的私钥
+#   │                                       ├── vault.pem  # Vault 节点间通信 服务端证书
 
 set -euo pipefail
 
@@ -80,6 +84,7 @@ cp "$OUT_DIR/ca/ca.pem" "$VAULT_CERTS_DIR/ca.pem"
 echo "  CA: $VAULT_CERTS_DIR/ca.pem"
 echo "  Vault: $VAULT_PEM"
 
+# ========== 生成服务端证书 ==========
 echo "=== 生成服务端证书 ==="
 for name in "${SERVER_NAMES[@]}"; do
     echo "  生成 $name 服务端证书..."

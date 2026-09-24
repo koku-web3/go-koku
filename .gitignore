@@ -14,5 +14,5 @@ cmd/signer/signer
 cmd/coordinator/coordinator
 
 internal/kms-vault/secure/vault-init.json
+internal/kms-vault/data
 internal/kms-vault/vault-deploy/data
-internal/kms-vault/vault-deploy/local-config/certs/

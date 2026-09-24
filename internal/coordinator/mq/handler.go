@@ -3,10 +3,8 @@ package mq
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/koku-web3/go-koku/internal/coordinator/key"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
 	"github.com/koku-web3/go-koku/internal/coordinator/tx"
 	"github.com/koku-web3/go-koku/internal/coordinator/types"
@@ -71,15 +69,10 @@ func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalT
 		log.Info("UniversalTransferCallback", "success", true, "biz_id", msg.BizID, "trace_id", msg.TraceID, "tx_hash", result.TxHash)
 		return nil
 	} else {
-		log.Error("UniversalTransferCallback", "biz_id", msg.BizID, "trace_id", msg.TraceID, "error", err.Error())
+		log.Info("UniversalTransferCallback", "biz_id", msg.BizID, "trace_id", msg.TraceID, "error", err.Error())
 	}
 
-	if errors.Is(err, key.ErrInvalidParam) ||
-		errors.Is(err, key.ErrKeyNotFound) ||
-		errors.Is(err, key.ErrInsufficientBalance) ||
-		errors.Is(err, key.ErrGenesisExists) {
-		return NewPermanentErrorFromError(err)
-	}
-
+	// 返回错误类型 Transient，调用方会丢失该消息，不会再重复调用
+	// TODO 网络错误需要重试
 	return NewTransientErrorFromError(err)
 }

@@ -4,386 +4,189 @@
 
 HashiCorp Vault 是一款用于安全管理敏感数据（如密钥、令牌、证书）的工具，支持加密、访问控制及动态凭证。在本项目中，Vault 作为去中心化密钥管理系统，通过 Transit Engine 为区块链交易提供密钥生成、加密和签名能力，并与 AWS IAM 集成实现安全认证，是链服务安全核心组件。
 
-## 1、安装
+## 单机部署说明
+- docker compose 一台机器启动 3 个 Vault 节点
+- 使用 AWS IAM User 让 Vault 的 `AWS Auth Method` 与 AWS 建立信任
+- Vault 生成的密钥数据保存在宿主机
+- 使用 Key Share 的方式进行解封（unseal）
+- 解封要求 2/3 ，生成三把密钥碎片，收集任意2把就能解封
 
-### macOS
+## 依赖
+需要先安装以下软件：
+- docker
+- openSSL
+- base64
+- gpg
 
+## 1、需要准备的文件
+
+**提示：如果用与开发环境快速启动可直接使用`./vault-deploy`目录下的文件，无需生成。**
+
+### 1.1 TLS证书文件
+
+保存路径`./vault-deploy/local-config/certs`
+
+证书文件用于 Vault 节点之间安全通信，开发部署三个节点可以使用同一份证书。
+
+执行脚本生成所需证书：
+``` bash
+sh ../../scripts/gen-certs.sh
+
+# 最终目录
+# certs/
+# ├── ca.pem
+# ├── vault.key
+# └── vault.pem   
+```
+
+### 1.2 公钥文件
+由于解封使用 Key Share 的方式，所以在 Vault 初始化时默认会在控制台直接输出每一把主密钥碎片的明文。我们希望 Vault 使用提供的公钥文件，对密钥碎片加密，这样就能很好的对碎片进行保密。
+
+因为我们使用 2/3 规则，所以需要生成 3 个公钥文件对应 3 把密钥碎片，由企业不同角色持有（如公司负责人、项目负责人、运营负责人各一把），需要任意两把密钥碎片才能启动 Vault 服务。
+
+执行以下命令生成 3 个公钥文件，外加一个 root.token 公钥文件。保存到路径`./vault-deploy/local-config/encryption`。
+``` bash
+# 生成 admin1 公钥
+gpg --full-generate-key
+gpg --export admin1@xxx.com > admin1_public.gpg
+...
+gpg --full-generate-key
+gpg --export admin1@xxx.com > root_public.gpg
+
+# 最终目录
+# encryption/
+# ├── admin1_public.gpg
+# ├── admin2_public.gpg
+# ├── admin3_public.gpg
+# └── root_public.gpg
+```
+
+### 1.3 Vault 配置文件
+每个节点对应一个配置文件。保存到路径`./vault-deploy/local-config/hcl`。
+``` bash
+# 最终目录
+# hcl/
+# ├── vault-1.hcl
+# ├── vault-2.hcl
+# └── vault-3.hcl
+```
+### 1.4 策略文件
+用于后面配置角色（服务）对 Transit（引擎）的访问权限。保存到路径`./vault-deploy/local-config/policy`。
+``` bash
+# 最终目录
+# policy/
+# ├── keycreator.hcl
+# └── signer.hcl
+```
+
+
+## 2、部署
 ```bash
-# 添加 HashiCorp 的官方仓库
-brew tap hashicorp/tap
+test -d ../data/1 || mkdir -p ../data/1
+test -d ../data/2 || mkdir -p ./data/2
+test -d ../data/3 || mkdir -p ./data/3
+chmod -R 777 ../data/{1,2,3}
 
-# 安装 Vault
-brew install hashicorp/tap/vault
+test -d ../secure || mkdir -p ../secure
+chmod -R 666 ../secure
 
-# 安装完成后，运行以下命令查看版本：
-vault --version
+# 配置文件卷（Vault 配置文件）
+docker volume create vault-config
+
+# 部署节点 1
+docker compose -f vault-deploy/vault.compose.yml up vault-1 --build --detach
+
+# 初始化节点 1
+docker exec -it prod-vault-1 \
+  vault operator init -key-shares=3 -key-threshold=2 -pgp-keys="/vault/encryption/admin1_public.gpg,/vault/encryption/admin2_public.gpg,/vault/encryption/admin3_public.gpg" -root-token-pgp-key="/vault/encryption/root_public.gpg" -format=json > ./secure/vault-init.json
+
+# 解封节点 1
+for i in 0 1; do
+  token=$(jq -r ".unseal_keys_b64[$i]" ./secure/vault-init.json | base64 --decode | gpg -dq)
+  docker exec prod-vault-1 vault operator unseal "$token"
+done
+
+# 部署节点 2、3
+docker compose -f vault-deploy/vault.compose.yml up vault-2 --build --detach
+docker compose -f vault-deploy/vault.compose.yml up vault-3 --build --detach
+
+# 解封节点 2、3
+for i in 0 1; do
+  token=$(jq -r ".unseal_keys_b64[$i]" ./secure/vault-init.json | base64 --decode | gpg -dq)
+  docker exec prod-vault-2 vault operator unseal "$token"
+  docker exec prod-vault-3 vault operator unseal "$token"
+done
 ```
 
-### Ubuntu / Debian 系统
+验证三个节点是否已建立集群：
+``` bash
+token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault operator raft list-peers
 
+# 正常时应看到 3 个节点状态如下：
+
+Node           Address                  State       Voter
+----           -------                  -----       -----
+prod-vault-1   prod-vault-1:8201        leader      true
+prod-vault-2   prod-vault-2:8201        follower    true
+prod-vault-3   prod-vault-3:8201        follower    true
+
+```
+
+## 3、配置 Vault
+### 3.1 AWS IAM Role & User
+
+### 3.2 创建三个 transit
+``` bash
+AWS_ACCESS_KEY = ""
+AWS_SECRET_KEY = ""
+ARN_CREATE_KEY = ""
+ARN_SIGN = ""
+token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
+
+# 创建三个 transit
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=transit/core transit
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=transit/operations transit
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault secrets enable -path=transit/user transit
+
+# 写入策略文件
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault policy write keycreator /vault/config/policy/keycreator.hcl
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault policy write signer /vault/config/policy/signer.hcl
+
+# 启用 AWS auth method
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault auth enable aws
+
+# 配置 AWS 客户端凭证
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/config/client \
+    access_key="$AWS_ACCESS_KEY" \
+    secret_key="$AWS_SECRET_KEY"
+
+# 创建 Vault Role并绑定到AWS IAM Role
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/role/role-key-creator \
+    auth_type=iam \
+    bound_iam_principal_arn=$ARN_CREATE_KEY \
+    policies=keycreator
+
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault write auth/aws/role/role-signer \
+    auth_type=iam \
+    bound_iam_principal_arn=$ARN_SIGN \
+    policies=signer
+
+```
+
+验证是否生效：
 ```bash
-# 1. 安装基础依赖与 HashiCorp GPG 密钥
-sudo apt-get update && sudo apt-get install -y gpg coreutils
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-
-# 2. 将 HashiCorp 官方源添加到 APT 软件源
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-
-# 3. 更新源并安装 Vault
-sudo apt-get update && sudo apt-get install vault
+token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/role/role-key-creator
+docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/role/role-signer
 ```
 
 
+## 4、transit 引擎
 
-### CentOS / RHEL / Rocky Linux 系统
+### 4.1 说明
 
-```bash
-# 1. 安装 yum-utils 依赖
-sudo yum install -y yum-utils
-
-# 2. 添加 HashiCorp 官方 YUM 源
-sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-
-# 3. 安装 Vault
-sudo yum -y install vault
-```
-
-
-
-### 其他 Linux 发行版
-
-直接下载预编译二进制文件安装
-
-```bash
-# 1. 下载指定版本的压缩包（以最新稳定版为例，请根据需要替换版本号）
-wget https://releases.hashicorp.com/vault/1.15.2/vault_1.15.2_linux_amd64.zip
-
-# 2. 解压文件（若无 unzip 命令可通过 apt/yum 安装）
-unzip vault_1.15.2_linux_amd64.zip
-
-# 3. 将二进制文件移动到系统 PATH 路径下
-sudo mv vault /usr/local/bin/
-
-# 4. 给予执行权限
-sudo chmod +x /usr/local/bin/vault
-```
-
-
-
-### Docker Compose 部署
-
-1、创建 docker-compose.yml 文件
-
-```dockerfile
-version: '3.7'
-services:
-  vault:
-    image: hashicorp/vault:v2.0.3
-    container_name: vault
-    ports:
-      - "8200:8200"
-    environment:
-      VAULT_ADDR: 'http://127.0.0.1:8200'
-      VAULT_LOCAL_CONFIG: |
-        storage "file" {
-          path = "/vault/file"
-        }
-        listener "tcp" {
-          address = "0.0.0.0:8200"
-          tls_disable = 1
-        }
-        ui = true
-    cap_add:
-      - IPC_LOCK
-    volumes:
-      - ./vault/file:/vault/file
-    command: server
-```
-
-2、启动容器
-
-```bash
-docker-compose up -d
-```
-
-3、验证安装
-
-```bash
-vault --version
-```
-
-
-
-## 2、启动 Vault
-
-
-
-### 2.1 创建一个配置文件
-
-```bash
-# 1. 开启可视化 UI 界面
-ui = false
-
-# 2. 全局网络行为配置
-api_addr     = "http://127.0.0.1:8200"
-cluster_addr = "http://127.0.0.1:8201"
-disable_mlock = true
-
-# 3. 数据落盘存储（使用本地 Raft）
-storage "raft" {
-  path    = "/Users/../vault/data"
-  node_id = "vault_node_a"
-}
-
-# 4. 网络监听（这里演示的是本地开发用的 HTTP 模式，生产请务必配证书并设置 tls_disable = "false"）
-listener "tcp" {
-  address         = "0.0.0.0:8200"
-  cluster_address = "0.0.0.0:8201"
-  tls_disable     = "true"
-}
-```
-
-命名为`vault-config.hcl`并保存
-
-### 2.2 启动 Vault 服务
-
-```bash
-vault server -config=./vault-config.hcl
-```
-
-
-
-### 2.3 设置环境变量
-
-设置地址变量，方便使用CLI命令
-
-```bash
-export VAULT_ADDR='http://127.0.0.1:8200'
-```
-
-
-
-## 3、生成主密钥（Master key）密钥
-
-生成 3 把密钥碎片，并且只需要 2 把就能开锁（n of m）。
-
-```bash
-vault operator init -key-shares=3 -key-threshold=2
-```
-
-
-
-## 4、解封（unseal）
-
-使用第3步生成的密钥碎片进行解封。如：公司负责人一把、技术负责人一把、放在保险库一把。
-
-```bash
-# 执行命令后按提示输入一把密钥，然后再执行一次命令并输入另一把密钥（2/3）
-vault operator unseal
-```
-
-
-
-## 5、激活 Transit 引擎
-
-> 提示：执行命令前请先阅读官方文档[https://developer.hashicorp.com/vault/docs/secrets/transit](https://developer.hashicorp.com/vault/docs/secrets/transit)，了解 transit 引擎相关概念。
-
-下面以 path `transit/bitcoin` 为例：
-
-### 5.1 激活
-
-```bash
-# 激活 transit 引擎
-vault secrets enable -path=transit/bitcoin transit
-```
-
-
-
-### 5.2 查看
-
-```bash
-# 列出当前所有已激活的引擎
-vault secrets list
-```
-
-```bash
-# 查看指定transit引擎详情
-vault read sys/mounts/transit/bitcoin
-```
-
-
-
-## 6、策略（Policy）配置
-
-> 提示：执行命令前请先阅读官方文档[https://developer.hashicorp.com/vault/docs/commands/policy](https://developer.hashicorp.com/vault/docs/commands/policy)，了解 policy 相关概念。
-
-
-
-### 6.1 编写策略文件
-
-编写一个`transit/bitcoin`相关的策略：可以对它进行创建密钥、更新密钥、读取详情、读取它的所有key列表。
-
-```bash
-path "transit/bitcoin/*" {
-  capabilities = ["create", "update", "read","list"]
-}
-```
-
-将文件保存并命名为`bitcoin-policy.hcl`。
-
-### 6.2 写入策略
-
-命令： `vault policy write [策略名称] [文件路径]`
-
-```bash
-vault policy write bitcoin-policy ./bitcoin-policy.hcl
-```
-
-写入了名称为`bitcoin-policy`的策略到 vault 系统。
-
-## 7、AWS相关配置
-
-> 提示：继续前请先自行了解AWS IAM Role/User相关概念。
-
-**架构简述**
-`key-creator`服务和`vault`服务分别部署在不同的AWS EC2（同一个内网）。使用 AWS IAM Role 主要作用是做身份认证：
-
-- 在AWS先创建一个Role`vault-auth-role`并让`vault`服务绑定概角色和对应的策略。
-- 在AWS创建另一个Role`key-creator-serv-ec2-role`绑定到 `key-creator-ser`的EC2，赋予它有权限扮演`vault-auth-role`角色。
-
-
-
-### 7.1 创建角色 vault-auth-role
-
-
-
-##### 1. 进入 IAM 服务
-
-导航到 **AWS Console → IAM → Roles → Create role**
-
-##### 2. 选择可信实体
-
-- Trusted entity type: **AWS account**
-- This account: **This account**
-- 点击 **Next**
-
-
-
-##### 3. 添加权限（先跳过）
-
-- 直接点击 **Next**（稍后添加权限）
-
-
-
-##### 4. 设置角色名称
-
-- Role name: `vault-auth-role`
-- 点击 **Create role**
-
-
-
-### 7.2 创建角色 key-creator-serv-ec2-role
-
-
-
-##### 1. 进入 IAM 服务
-
-**IAM → Roles → Create role**
-
-##### 2. 选择可信实体
-
-- Trusted entity type: **AWS service**
-- Use case: **EC2**
-- 点击 **Next**
-
-
-
-##### 3. 添加权限
-
-点击 **Create policy**，新窗口中：
-
-**JSON 标签页：**
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "sts:AssumeRole",
-      "Resource": "arn:aws:iam::<你的AWS账户ID>:role/vault-auth-role"
-    }
-  ]
-}
-```
-
-- 点击 **Next → Next**
-- Policy name: `key-creator-serv-ec2-policy`
-- 点击 **Create policy**
-
-返回角色创建页面，勾选刚创建的 `key-creator-serv-ec2-policy`，点击 **Next**
-
-##### 4. 设置角色名称
-
-- Role name: `key-creator-serv-ec2-role`
-- 点击 **Create role**
-
-
-
-### 7.3 编辑“信任策略”
-
-导航到 **AWS Console → IAM → Roles → 点击“vault-auth-role”
-
-进入该角色的 Trust relationships → Edit trust policy，粘贴：
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "AWS": "arn:aws:iam::<你的AWS账户ID>:role/key-creator-serv-ec2-role"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-```
-
-
-
-### 7.4 EC2关联 Instance Profile（实例文件）
-
-> 注意：仅需在部署`key-creator`的 EC2 配置，`vault`不需要。
-
-在启动EC2实例时配置：
-EC2 → 实例 → 启动新实例 → 高级详细信息 → 在“IAM 实例配置文件”项选择前面创建的`key-creator-serv-ec2-role` → 完成
-
-## 8、Vault Role
-
-
-
-## 8.1 绑定
-
-Vault系统也有自己的角色，我们需要把 AWS IAM Role 绑定到它的角色：
-
-```bash
-curl --header "X-Vault-Token: <root_token>" \
-     --request POST \
-     --data '{"role": "bitcoin-client", "arn": "arn:aws:iam::<你的AWS账户ID>:role/vault-auth-role", "policies": ["bitcoin-policy"]}' \
-     http://127.0.0.1:8200/v1/auth/aws/role/bitcoin-client
-```
-
-其中`arn`对应的就是AWS角色`vault-auth-role`的ARN。
-
-## 8.2 验证
-
-执行命令`vault read auth/aws/role/bitcoin-client` 查看是否已绑定成功。
-
-## 9 transit引擎激活
-
-按功能划分出3个transit引擎，主要使用的密钥类型是 `aes256-gcm96`，GCM模式的AES对称加密，96为随机数。
+项目按功能划分出3个transit引擎，主要使用的密钥类型是 `aes256-gcm96`，GCM模式的AES对称加密，96为随机数。
 
 格式：`transit/{transit_name}/{key_name}`
 
@@ -398,11 +201,11 @@ curl --header "X-Vault-Token: <root_token>" \
 
 
 
-## 9.1 示例
+### 4.2 示例
 
 加密的路径格式为：`transit/{transit_name}/encrypt/{key_name}`。
 
-以下展示以太坊链对**主密钥种子**进行加密
+以下展示 Ethereum 对**主密钥种子**进行加密
 
 ```bash
  curl --header "X-Vault-Token: hvs.g1bZWi6flTJdB5GZopREVdBU" \
@@ -414,3 +217,4 @@ curl --header "X-Vault-Token: <root_token>" \
      http://127.0.0.1:8200/v1/transit/core/encrypt/masterkey
 ```
 
+**关于 Transit 的更多信息参考 https://developer.hashicorp.com/vault/api-docs/secret/transit**

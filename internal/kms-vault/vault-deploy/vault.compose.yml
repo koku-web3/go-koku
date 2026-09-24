@@ -18,7 +18,7 @@ services:
     networks:
       - vault_cluster # 加入集群共享网络
     build:
-      context: . # 构建上下文目录（当前目录，即 vault-deploy/）
+      context: . # 构建上下文目录（当前 compose 文件所在目录，即 vault-deploy/）
       dockerfile: vault.Dockerfile # 使用的 Dockerfile 文件名
     environment:
       VAULT_CACERT: "/vault/certs/ca.pem" # 需要设置环境变量指定证书机构, 否则报错：tls: failed to verify certificate: x509: certificate signed by unknown authority
@@ -34,7 +34,7 @@ services:
     volumes:
       # bind mount: 节点 1 的 Raft 数据持久化到宿主机项目内目录
       # 使用相对路径, 部署到任意机器时无需修改 compose 文件
-      - ./data/1:/vault/data
+      - ../data/1:/vault/data
     environment:
       VAULT_ADDR: https://prod-vault-1:8200 # 本节点对外提供服务的地址（本机 CLI 调用可用）
       NODE_IDX: "1" # 告诉 Dockerfile 的 CMD 加载 vault-1.hcl 配置
@@ -51,7 +51,7 @@ services:
     hostname: prod-vault-2
     volumes:
       # bind mount: 节点 2 的 Raft 数据持久化到宿主机项目内目录
-      - ./data/2:/vault/data
+      - ../data/2:/vault/data
     environment:
       VAULT_ADDR: https://prod-vault-2:8200
       NODE_IDX: "2"
@@ -66,7 +66,7 @@ services:
     hostname: prod-vault-3
     volumes:
       # bind mount: 节点 3 的 Raft 数据持久化到宿主机项目内目录
-      - ./data/3:/vault/data
+      - ../data/3:/vault/data
     environment:
       VAULT_ADDR: https://prod-vault-3:8200
       NODE_IDX: "3"
@@ -75,4 +75,4 @@ services:
 # 引入共享的网络/数据卷定义文件
 # ------------------------------------------------------------------
 include:
-  - path: ../shared-deploy/cluster-env.yml
+  - path: ./shared/cluster-env.yml

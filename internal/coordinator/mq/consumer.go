@@ -139,9 +139,9 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		msg, err := ParseMsg(d.Body)
 		if err != nil {
 			log.Error("Parse msg failed, reject without requeue", "queue", queueName, "error", err)
-			if nackErr := d.Nack(false, false); nackErr != nil {
-				log.Error("failed to nack message", "error", nackErr)
-			}
+			// 拒绝消息，丢弃或进入 DLQ（Dead Letter Exchange）死信交换机名
+			// 如果没有 DLQ 配置，消息直接从队列中删除，永远丢失
+			// 如果配置了 DLQ 被拒绝的消息会被路由到 DLQ，供后续分析和处理（如人工审查、重试）
 			return rabbitmq.NackDiscard
 		}
 
@@ -155,31 +155,21 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		err = c.handler.Handle(c.ctx, routingKey, msg)
 		elapsed := time.Since(start)
 
-		if err == nil {
-			if ackErr := d.Ack(false); ackErr != nil {
-				log.Error("failed to ack message", "error", ackErr)
-			}
-			log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "elapsed_ms", elapsed.Milliseconds())
-			return rabbitmq.Ack
-		}
-
-		if IsPermanent(err) {
-			if nackErr := d.Nack(false, false); nackErr != nil {
-				log.Error("failed to nack message", "error", nackErr)
-			}
+		if err != nil {
+			// TODO 不管是什么错误，消息不再重入队列
+			// if IsPermanent(err) {
 			log.Error("Msg processed failed (permanent), reject without requeue", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "elapsed_ms", elapsed.Milliseconds())
 			return rabbitmq.NackDiscard
 		}
 
-		if nackErr := d.Nack(false, true); nackErr != nil {
-			log.Error("failed to nack message", "error", nackErr)
-		}
-		log.Error("Msg processed failed (transient), requeue for retry", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "elapsed_ms", elapsed.Milliseconds())
-		return rabbitmq.NackRequeue
+		log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "elapsed_ms", elapsed.Milliseconds())
+		// 消息处理成功，通知 broker，内部调用Ack(false)
+		return rabbitmq.Ack
+
 	}
 
 	if err := consumer.Run(handler); err != nil {
-		log.Error("consumer run error", "queue", queueName, "error", err)
+		log.Error("Consumer run error", "queue", queueName, "error", err)
 	}
 }
 

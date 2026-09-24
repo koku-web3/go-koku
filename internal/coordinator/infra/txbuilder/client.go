@@ -123,7 +123,7 @@ func (c *Client) BuildSignRawData(ctx context.Context, req *tbgrpc.BuildSignRawD
 		log.Error("Call TxBuilderClient.BuildSignRawData failed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "time_cost_us", cost.Microseconds(), "error", err.Error())
 		return nil, fmt.Errorf("call TxBuilderClient.BuildSignRawData failed: %w", err)
 	}
-	log.Debug("Call TxBuilderClient.BuildSignRawData completed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "time_cost_us", cost.Microseconds())
+	log.Info("Build transaction completed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "time_cost_us", cost.Microseconds())
 	return res, nil
 }
 
@@ -140,7 +140,7 @@ func (c *Client) TxBroadcast(ctx context.Context, in *tbgrpc.TxBroadcastRequest,
 		log.Error("Call TxBuilderClient.TxBroadcast failed", "trace_id", in.TraceId, "chain_code", chainCode, "time_cost_us", cost.Microseconds(), "error", err.Error())
 		return nil, fmt.Errorf("call TxBuilderClient.TxBroadcast failed: %w", err)
 	}
-	log.Debug("Call TxBuilderClient.TxBroadcast completed", "trace_id", in.TraceId, "chain_code", chainCode, "time_cost_us", cost.Microseconds())
+	log.Info("Broadcast transcation completed", "trace_id", in.TraceId, "chain_code", chainCode, "time_cost_us", cost.Microseconds())
 	return res, nil
 }
 
