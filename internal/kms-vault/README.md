@@ -135,13 +135,19 @@ prod-vault-3   prod-vault-3:8201        follower    true
 
 ## 3、配置 Vault
 ### 3.1 AWS IAM Role & User
+按照 [Vault接入AWS身份认证](../../docs/aws-iam-auth.md) 的步骤获得以下关键信息：
+- `access_key`
+- `secret_key`
+- 角色 `create-key-role` 的ARN
+- 角色 `signer-role` 的ARN
 
 ### 3.2 创建三个 transit
 ``` bash
-AWS_ACCESS_KEY = ""
-AWS_SECRET_KEY = ""
-ARN_CREATE_KEY = ""
-ARN_SIGN = ""
+AWS_ACCESS_KEY = "" # <3.1 获得的 access_key>
+AWS_SECRET_KEY = "" # <3.1 获得的 secret_key>
+ARN_CREATE_KEY = "" # <3.1 获得的 create-key-role ARN>
+ARN_SIGN = "" # <3.1 获得的 signer-role ARN>
+
 token=$(jq -r '.root_token' ./secure/vault-init.json | base64 --decode | gpg -dq)
 
 # 创建三个 transit
@@ -182,7 +188,7 @@ docker exec -e VAULT_TOKEN="$token" prod-vault-1 vault read auth/aws/role/role-s
 ```
 
 
-## 4、transit 引擎
+## 4、transit 引擎划分
 
 ### 4.1 说明
 

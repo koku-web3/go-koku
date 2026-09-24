@@ -6,8 +6,6 @@ ai/
 .DS_Store
 *.log
 
-# mTLS certificates and keys - never commit secrets
-certs/
 
 cmd/key-creator/key-creator
 cmd/signer/signer

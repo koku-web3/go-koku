@@ -165,7 +165,6 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "elapsed_ms", elapsed.Milliseconds())
 		// 消息处理成功，通知 broker，内部调用Ack(false)
 		return rabbitmq.Ack
-
 	}
 
 	if err := consumer.Run(handler); err != nil {
