@@ -107,10 +107,9 @@ message CheckSufficientBalanceRequest {
   string trace_id = 1; // 1-36 必填
   string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
   string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-  bool is_basic_coin = 4; // 必填；是否主链币
-  string from_address = 5; // 1-256 必填；转账发起地址
-  string amount = 6; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-  string contract = 7; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+  string from_address = 4; // 1-256 必填；转账发起地址
+  string amount = 5; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 6; // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 }
 
 message CheckSufficientBalanceResponse {
@@ -124,11 +123,10 @@ message UniversalTransferRequest {
   string trace_id = 1; // 1-36 必填
   string chain_code = 2; // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
   string coin = 3; // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-  bool is_basic_coin = 4; // 必填；是否主链币
-  string from_address = 5; // 1-256 必填；转账发起地址 
-  string to_address = 6; // 1-256 必填；转账接收地址
-  string amount = 7; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-  string contract = 8; // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+  string from_address = 4; // 1-256 必填；转账发起地址 
+  string to_address = 5; // 1-256 必填；转账接收地址
+  string amount = 6; // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+  string contract = 7; // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 }
 
 message UniversalTransferResponse {

@@ -158,13 +158,12 @@ func (s *Server) VerifyContractAddress(ctx context.Context, req *proto.VerifyCon
 }
 
 func (s *Server) CheckSufficientBalance(ctx context.Context, req *proto.CheckSufficientBalanceRequest) (*proto.CheckSufficientBalanceResponse, error) {
-	log.Info("CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "is_base_coin", req.IsBasicCoin, "from", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
+	log.Info("CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "from", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
 
 	result, err := s.keySvc.CheckSufficientBalance(ctx, &types.BalanceInput{
 		TraceID:     req.TraceId,
 		ChainCode:   req.ChainCode,
 		Coin:        req.Coin,
-		IsBasicCoin: req.IsBasicCoin,
 		FromAddress: req.FromAddress,
 		Amount:      req.Amount,
 		Contract:    req.Contract,

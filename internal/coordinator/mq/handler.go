@@ -25,7 +25,6 @@ type UniversalTransferMsg struct {
 	TraceID     string `json:"trace_id"`
 	ChainCode   string `json:"chain_code"`
 	Coin        string `json:"coin"`
-	IsBasicCoin bool   `json:"is_basic_coin"`
 	FromAddress string `json:"from_address"`
 	ToAddress   string `json:"to_address"`
 	Amount      string `json:"amount"`

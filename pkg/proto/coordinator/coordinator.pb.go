@@ -579,13 +579,12 @@ func (x *VerifyContractAddressResponse) GetIsValid() bool {
 
 type CheckSufficientBalanceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`                // 1-36 必填
-	ChainCode     string                 `protobuf:"bytes,2,opt,name=chain_code,json=chainCode,proto3" json:"chain_code,omitempty"`          // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
-	Coin          string                 `protobuf:"bytes,3,opt,name=coin,proto3" json:"coin,omitempty"`                                     // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-	IsBasicCoin   bool                   `protobuf:"varint,4,opt,name=is_basic_coin,json=isBasicCoin,proto3" json:"is_basic_coin,omitempty"` // 必填；是否主链币
-	FromAddress   string                 `protobuf:"bytes,5,opt,name=from_address,json=fromAddress,proto3" json:"from_address,omitempty"`    // 1-256 必填；转账发起地址
-	Amount        string                 `protobuf:"bytes,6,opt,name=amount,proto3" json:"amount,omitempty"`                                 // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-	Contract      string                 `protobuf:"bytes,7,opt,name=contract,proto3" json:"contract,omitempty"`                             // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`             // 1-36 必填
+	ChainCode     string                 `protobuf:"bytes,2,opt,name=chain_code,json=chainCode,proto3" json:"chain_code,omitempty"`       // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
+	Coin          string                 `protobuf:"bytes,3,opt,name=coin,proto3" json:"coin,omitempty"`                                  // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
+	FromAddress   string                 `protobuf:"bytes,4,opt,name=from_address,json=fromAddress,proto3" json:"from_address,omitempty"` // 1-256 必填；转账发起地址
+	Amount        string                 `protobuf:"bytes,5,opt,name=amount,proto3" json:"amount,omitempty"`                              // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+	Contract      string                 `protobuf:"bytes,6,opt,name=contract,proto3" json:"contract,omitempty"`                          // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -639,13 +638,6 @@ func (x *CheckSufficientBalanceRequest) GetCoin() string {
 		return x.Coin
 	}
 	return ""
-}
-
-func (x *CheckSufficientBalanceRequest) GetIsBasicCoin() bool {
-	if x != nil {
-		return x.IsBasicCoin
-	}
-	return false
 }
 
 func (x *CheckSufficientBalanceRequest) GetFromAddress() string {
@@ -723,14 +715,13 @@ func (x *CheckSufficientBalanceResponse) GetIsTokenSufficient() bool {
 
 type UniversalTransferRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`                // 1-36 必填
-	ChainCode     string                 `protobuf:"bytes,2,opt,name=chain_code,json=chainCode,proto3" json:"chain_code,omitempty"`          // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
-	Coin          string                 `protobuf:"bytes,3,opt,name=coin,proto3" json:"coin,omitempty"`                                     // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
-	IsBasicCoin   bool                   `protobuf:"varint,4,opt,name=is_basic_coin,json=isBasicCoin,proto3" json:"is_basic_coin,omitempty"` // 必填；是否主链币
-	FromAddress   string                 `protobuf:"bytes,5,opt,name=from_address,json=fromAddress,proto3" json:"from_address,omitempty"`    // 1-256 必填；转账发起地址
-	ToAddress     string                 `protobuf:"bytes,6,opt,name=to_address,json=toAddress,proto3" json:"to_address,omitempty"`          // 1-256 必填；转账接收地址
-	Amount        string                 `protobuf:"bytes,7,opt,name=amount,proto3" json:"amount,omitempty"`                                 // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
-	Contract      string                 `protobuf:"bytes,8,opt,name=contract,proto3" json:"contract,omitempty"`                             // 1-256 非必填；转账币种对应的合约地址。如果`isBasicCoin`为false时，必填
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`             // 1-36 必填
+	ChainCode     string                 `protobuf:"bytes,2,opt,name=chain_code,json=chainCode,proto3" json:"chain_code,omitempty"`       // 1-36 必填； 唯一， 表示区块链名称，如：bitcoin、ethereum、tron
+	Coin          string                 `protobuf:"bytes,3,opt,name=coin,proto3" json:"coin,omitempty"`                                  // 必填； 唯一， 表示转账币种，如：btc、eth、usdt、dog；不涉及判断逻辑，仅作展示
+	FromAddress   string                 `protobuf:"bytes,4,opt,name=from_address,json=fromAddress,proto3" json:"from_address,omitempty"` // 1-256 必填；转账发起地址
+	ToAddress     string                 `protobuf:"bytes,5,opt,name=to_address,json=toAddress,proto3" json:"to_address,omitempty"`       // 1-256 必填；转账接收地址
+	Amount        string                 `protobuf:"bytes,6,opt,name=amount,proto3" json:"amount,omitempty"`                              // 必填； 金额，单位是最小该链单位，如：以太坊单位就是wei；波场单位就是sun
+	Contract      string                 `protobuf:"bytes,7,opt,name=contract,proto3" json:"contract,omitempty"`                          // 1-256 非必填；转账币种对应的合约地址。如果空串表示主链币
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -784,13 +775,6 @@ func (x *UniversalTransferRequest) GetCoin() string {
 		return x.Coin
 	}
 	return ""
-}
-
-func (x *UniversalTransferRequest) GetIsBasicCoin() bool {
-	if x != nil {
-		return x.IsBasicCoin
-	}
-	return false
 }
 
 func (x *UniversalTransferRequest) GetFromAddress() string {
@@ -904,30 +888,28 @@ const file_proto_coordinator_proto_rawDesc = "" +
 	"\n" +
 	"chain_code\x18\x03 \x01(\tR\tchainCode\":\n" +
 	"\x1dVerifyContractAddressResponse\x12\x19\n" +
-	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xe8\x01\n" +
+	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xc4\x01\n" +
 	"\x1dCheckSufficientBalanceRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
 	"chain_code\x18\x02 \x01(\tR\tchainCode\x12\x12\n" +
-	"\x04coin\x18\x03 \x01(\tR\x04coin\x12\"\n" +
-	"\ris_basic_coin\x18\x04 \x01(\bR\visBasicCoin\x12!\n" +
-	"\ffrom_address\x18\x05 \x01(\tR\vfromAddress\x12\x16\n" +
-	"\x06amount\x18\x06 \x01(\tR\x06amount\x12\x1a\n" +
-	"\bcontract\x18\a \x01(\tR\bcontract\"~\n" +
+	"\x04coin\x18\x03 \x01(\tR\x04coin\x12!\n" +
+	"\ffrom_address\x18\x04 \x01(\tR\vfromAddress\x12\x16\n" +
+	"\x06amount\x18\x05 \x01(\tR\x06amount\x12\x1a\n" +
+	"\bcontract\x18\x06 \x01(\tR\bcontract\"~\n" +
 	"\x1eCheckSufficientBalanceResponse\x12,\n" +
 	"\x12is_coin_sufficient\x18\x01 \x01(\bR\x10isCoinSufficient\x12.\n" +
-	"\x13is_token_sufficient\x18\x02 \x01(\bR\x11isTokenSufficient\"\x82\x02\n" +
+	"\x13is_token_sufficient\x18\x02 \x01(\bR\x11isTokenSufficient\"\xde\x01\n" +
 	"\x18UniversalTransferRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
 	"chain_code\x18\x02 \x01(\tR\tchainCode\x12\x12\n" +
-	"\x04coin\x18\x03 \x01(\tR\x04coin\x12\"\n" +
-	"\ris_basic_coin\x18\x04 \x01(\bR\visBasicCoin\x12!\n" +
-	"\ffrom_address\x18\x05 \x01(\tR\vfromAddress\x12\x1d\n" +
+	"\x04coin\x18\x03 \x01(\tR\x04coin\x12!\n" +
+	"\ffrom_address\x18\x04 \x01(\tR\vfromAddress\x12\x1d\n" +
 	"\n" +
-	"to_address\x18\x06 \x01(\tR\ttoAddress\x12\x16\n" +
-	"\x06amount\x18\a \x01(\tR\x06amount\x12\x1a\n" +
-	"\bcontract\x18\b \x01(\tR\bcontract\"+\n" +
+	"to_address\x18\x05 \x01(\tR\ttoAddress\x12\x16\n" +
+	"\x06amount\x18\x06 \x01(\tR\x06amount\x12\x1a\n" +
+	"\bcontract\x18\a \x01(\tR\bcontract\"+\n" +
 	"\x19UniversalTransferResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok2\xeb\x05\n" +
 	"\vCoordinator\x12P\n" +
