@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// AllModels 所有需要迁移的模型，用于启动时自动建表
+// AllModels 所有需要迁移的模型,用于启动时自动建表
 var AllModels = []interface{}{
 	&Chain{},
 	&CoreKey{},
@@ -18,8 +18,8 @@ var AllModels = []interface{}{
 // 存储区块链网络配置信息
 type Chain struct {
 	ID                uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ChainCode         string    `gorm:"type:varchar(36);uniqueIndex;not null;comment:区块链代码，如 bitcoin、ethereum" json:"chain_code"`
-	BaseCoin          string    `gorm:"type:varchar(10);not null;comment:主链币，如 btc、eth" json:"base_coin"`
+	ChainCode         string    `gorm:"type:varchar(36);uniqueIndex;not null;comment:区块链代码,如 bitcoin、ethereum" json:"chain_code"`
+	BaseCoin          string    `gorm:"type:varchar(10);not null;comment:主链币,如 btc、eth" json:"base_coin"`
 	RPCURL            string    `gorm:"type:varchar(256);not null;comment:区块链RPC地址" json:"rpc_url"`
 	ExplorerURL       string    `gorm:"type:varchar(256);comment:区块链浏览器地址" json:"explorer_url"`
 	WebsiteURL        string    `gorm:"type:varchar(256);comment:官方网站地址" json:"website_url"`
@@ -35,13 +35,14 @@ func (Chain) TableName() string {
 }
 
 // CoreKey 核心密钥表
-// 存储核心密钥（运营密钥和用户密钥的 BIP32 主密钥）
+// 存储 BIP-44 中第三层级 Account （m/44'/coinType'/account'）密钥
+// 每个链存储两条数据（运营密钥和用户密钥的）
 type CoreKey struct {
 	ID                 uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
 	ChainCode          string    `gorm:"type:varchar(36);uniqueIndex:idx_chain_usage;not null;comment:区块链代码" json:"chain_code"`
 	KeyUsage           uint8     `gorm:"type:tinyint;uniqueIndex:idx_chain_usage;not null;comment:0=OPERATIONAL, 1=USER" json:"key_usage"`
 	Bip32KeyCiphertext string    `gorm:"type:text;not null;comment:加密后的bip32主密钥 hex 格式" json:"bip32key_ciphertext"`
-	DEK_Ciphertext     string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
+	DEK_Ciphertext     string    `gorm:"type:text;comment:DEK 密文,用于信封加密" json:"dek_ciphertext"`
 	Context            string    `gorm:"type:varchar(128);not null;comment:密钥派生上下文标识符, 1-36必填, 唯一" json:"context"`
 	Bip44Path          string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径字符串" json:"bip44_path"`
 	CreatedAt          time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -54,18 +55,18 @@ func (CoreKey) TableName() string {
 }
 
 // MasterKey 主密钥表
-// 存储 HD 主密钥的元数据和加密的 BIP32 主密钥
+// 存储 HD 主密钥的元数据和加密的种子 seed
 type MasterKey struct {
-	ID                 uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ChainCode          string    `gorm:"type:varchar(36);uniqueIndex;not null" json:"chain_code"`
-	KeyType            string    `gorm:"type:varchar(36);not null;comment:密钥类型，如 ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519" json:"key_type"`
-	Bip32KeyCiphertext string    `gorm:"type:text;not null;comment:加密后的bip32主密钥 hex 格式" json:"bip32key_ciphertext"`
-	DEK_Ciphertext     string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
-	Context            string    `gorm:"type:varchar(128);not null;comment:密钥派生上下文标识符, 1-36必填, 唯一" json:"context"`
-	Bip44Path          string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径字符串" json:"bip44_path"`
-	CreatedAt          time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt          time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-	IsDeleted          bool      `gorm:"default:false;comment:软删除标记" json:"is_deleted"`
+	ID             uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	ChainCode      string    `gorm:"type:varchar(36);uniqueIndex;not null" json:"chain_code"`
+	KeyType        string    `gorm:"type:varchar(36);not null;comment:密钥类型,如 ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519" json:"key_type"`
+	SeedCiphertext string    `gorm:"type:text;not null;comment:HD seed 经 Vault 信封加密后的密文" json:"seed_ciphertext"`
+	DEK_Ciphertext string    `gorm:"type:text;comment:DEK 密文,用于信封加密" json:"dek_ciphertext"`
+	Context        string    `gorm:"type:varchar(128);not null;comment:密钥派生上下文标识符, 1-36必填, 唯一" json:"context"`
+	Bip44Path      string    `gorm:"type:varchar(64);not null;comment:BIP-44路径,格式m/44'/coinType" json:"bip44_path"`
+	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	IsDeleted      bool      `gorm:"default:false;comment:软删除标记" json:"is_deleted"`
 }
 
 func (MasterKey) TableName() string {
@@ -82,7 +83,7 @@ type ChindKey struct {
 	BIP44Path      string    `gorm:"type:varchar(64);not null;comment:BIP-44 路径: m/44'/60'/0'/1/0" json:"bip44_path"`
 	KeyContext     string    `gorm:"type:varchar(128);not null;comment:Base64(SHA256(bip44_path)) 用于 Vault context" json:"key_context"`
 	Ciphertext     string    `gorm:"type:text;not null;comment:加密后的 DER 格式密钥, 返回base64编码格式" json:"ciphertext"`
-	DEK_Ciphertext string    `gorm:"type:text;comment:DEK 密文，用于信封加密" json:"dek_ciphertext"`
+	DEK_Ciphertext string    `gorm:"type:text;comment:DEK 密文,用于信封加密" json:"dek_ciphertext"`
 	PublicKey      string    `gorm:"type:varchar(256);not null;comment:公钥 (Hex)" json:"public_key"`
 	KeyAddress     string    `gorm:"type:varchar(128);not null;comment:地址" json:"key_address"`
 	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -95,7 +96,7 @@ func (ChindKey) TableName() string {
 }
 
 // AuditLog 审计日志表
-// 记录所有密钥操作，用于合规审计
+// 记录所有密钥操作,用于合规审计
 type AuditLog struct {
 	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
 	TraceID     string    `gorm:"type:varchar(64);index;not null;comment:链路跟踪 ID" json:"trace_id"`

@@ -98,8 +98,7 @@ func (s *Server) CreateOperationalKey(ctx context.Context, req *proto.CreateKeyR
 	if err != nil {
 		log.Error("CreateOperationalKey failed", "trace_id", req.TraceId, "error", err.Error())
 	} else {
-		log.Debug("CreateOperationalKey success", "trace_id", req.TraceId)
-		log.Debug("CreateOperationalKey response", "trace_id", req.TraceId, "address_list", result)
+		log.Debug("CreateOperationalKey success", "trace_id", req.TraceId, "address_list", result)
 	}
 
 	return &proto.CreateKeyResponse{

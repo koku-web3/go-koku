@@ -29,7 +29,8 @@ import (
 // KeyCreatorService gRPC 签名服务实现
 // 遵循 FINANCE 安全标准：
 // - 私钥明文仅在 KeyCreator 内存中短暂存在
-// - 所有密钥操作通过 Vault Transit Engine 加密
+// - 所有密钥操作通过 KMS（Vault Transit Engine） 加密
+// - 运营密钥与用户密钥从使用到存储全方位隔离
 // - 主密钥种子加密存储，按需解密使用
 type KeyCreatorService struct {
 	proto.UnimplementedKeyCreatorServer
@@ -87,7 +88,6 @@ func (s *KeyCreatorService) StopWhenCancelled(ctx context.Context) {
 func (s *KeyCreatorService) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
 	log.Info("Genesis called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "key_type", req.KeyType)
 
-	// 入参校验
 	if err := validateGenesisRequest(req); err != nil {
 		log.Error("Genesis validation failed", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -121,13 +121,12 @@ type keyNameFunc func(string) string
 func (s *KeyCreatorService) createDerivedKeys(req *proto.CreateKeyRequest, expectedUsage keyutil.AccountUsage, transitName string, getKeyName keyNameFunc) (*proto.CreateKeyResponse, error) {
 	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "account_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext_length", len(req.Bip32KeyCiphertext))
 
-	// 入参校验
 	if err := validateCreateKeyRequest(req); err != nil {
 		log.Error("CreateKey validation failed", "trace_id", req.TraceId, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	// 检查 bip44Path 的 Account 是否匹配预期用途
+	// 检查 bip44Path 的 Account 是否匹配
 	usage, err := findUsage(req.Bip44Path)
 	if err != nil {
 		log.Error("Failed to resolve bip44_path account", "trace_id", req.TraceId, "error", err)
@@ -138,7 +137,7 @@ func (s *KeyCreatorService) createDerivedKeys(req *proto.CreateKeyRequest, expec
 		return nil, fmt.Errorf("Unsupported bip44Path(account=%d) in this API", usage)
 	}
 
-	// 获取算法实现
+	// 根据不同加密算法获取算法实现
 	algo, err := algorithm.Get(req.KeyType)
 	if err != nil {
 		log.Error("Unsupported key type", "key_type", req.KeyType, "trace_id", req.TraceId)
@@ -155,19 +154,21 @@ func (s *KeyCreatorService) createDerivedKeys(req *proto.CreateKeyRequest, expec
 // generateThreeCoreKeys 创建指定区块链的 BIP-44 主密钥种子、以及派生它的两个密钥
 // BIP-44 路径说明：m/purpose'/coinType'/account'/change/index
 // 流程：
-// 1. 生成随机 HD 主密钥种子Seed，，得到一个 bip32.key 类型的变量1
-// 2. 使用Seed派生 m/44'/coinType'/0'/0/0（account=0，运营）路径的私钥，得到一个 bip32.key 类型的变量2
-// 3. 使用Seed派生 m/44'/coinType'/1'/0/0（account=1，用户）路径的私钥，得到一个 bip32.key 类型的变量3
-// 4. 将以上3个变量分别转换为 PEM 格式
-// 5. 使用 s.kmsServ.Encrypt 分别对3个变量进行加密，注意使用的transit引擎路径为 /transit/core
-// 6. 返回3个变量的密文、context、bip44Path
+//  1. 生成随机 HD 主密钥种子 seed（32 字节）
+//  2. 使用 seed 派生 m/44'/coinType'/0'/0/0（account=0，运营）路径的私钥
+//  3. 使用 seed 派生 m/44'/coinType'/1'/0/0（account=1，用户）路径的私钥
+//  4. 将两个 account 密钥分别序列化为字节
+//  5. 使用 s.kmsServ.Encrypt 分别对 seed（master）和两个序列化密钥进行加密，
+//     使用的 transit 引擎路径为 /transit/core
+//  6. 返回 seed 密文、context、bip44Path 以及两个派生密钥的密文
 //
 // 安全要点：
-//   - 所有 bip32.Key 明文通过各 defer 链路在函数返回前清零;
-//   - 各 Serialize() 中间字节片通过 defer ClearBytes 在函数返回前清零;
-//   - 加密后的种子可安全存储在数据库中;
-//   - 对于密钥的操作,直接使用 bip32.key 类型;需要对密钥加密时,使用 Serialize()序列化;
-//     需要解密时使用 Deserialize() 反序列化;
+//   - seed 包含主密钥的全部熵，必须在内存中显式擦除后方可释放；
+//   - 所有 bip32.Key 明文通过各 defer 链路在函数返回前擦除；
+//   - 各 Serialize() 中间字节片通过 defer Memzero 在函数返回前擦除；
+//   - 加密后的 seed 可安全存储在数据库中；
+//   - 对于密钥的操作，直接使用 bip32.Key 类型；需要对密钥加密时，使用 Serialize() 序列化；
+//     需要解密时使用 NewMasterKey(seed) 从 seed 重建主密钥；
 func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType string) (*proto.GenesisResponse, error) {
 	// 验证链是否支持 BIP-44
 	coinType, err := hdwallet.CoinTypeFromChainCode(chainCode)
@@ -175,36 +176,36 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("unsupported %s chain for BIP-44", chainCode)
 	}
 
-	// ========== 步骤 1: 生成 HD 主密钥 ==========
+	// ========== 步骤 1: 生成 HD 主密钥 seed ==========
 	var (
-		masterKey      *bip32.Key
-		key44          *bip32.Key
-		key44Coin      *bip32.Key
-		keyAccount0    *bip32.Key
-		keyAccount1    *bip32.Key
-		masterKeyBytes []byte
-		opKeyBytes     []byte
-		userKeyBytes   []byte
+		masterKey    *bip32.Key
+		key44        *bip32.Key
+		key44Coin    *bip32.Key
+		keyAccount0  *bip32.Key
+		keyAccount1  *bip32.Key
+		seed         []byte
+		opKeyBytes   []byte
+		userKeyBytes []byte
 	)
 
-	masterKey, err = hdwallet.GenerateBip32Key()
+	masterKey, seed, err = hdwallet.GenerateBip32Key()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate BIP32 master key: %w", err)
 	}
 
-	// 所有 bip32.Key 明文在函数退出时统一清零（LIFO 顺序)
+	// 所有 bip32.Key 明文和 seed 在函数退出时统一擦除（LIFO 顺序)
 	defer func() {
+		securestore.Memzero(seed)
 		securestore.MemzeroBip32Key(keyAccount1)
 		securestore.MemzeroBip32Key(keyAccount0)
 		securestore.MemzeroBip32Key(key44Coin)
 		securestore.MemzeroBip32Key(key44)
 		securestore.MemzeroBip32Key(masterKey)
-		securestore.Memzero(masterKeyBytes)
 		securestore.Memzero(opKeyBytes)
 		securestore.Memzero(userKeyBytes)
 	}()
 
-	// 派生并密钥
+	// 派生 44' 密钥
 	// m/44' — Purpose (hardened)
 	key44, err = masterKey.NewChildKey(hdwallet.BIP44Purpose)
 	if err != nil {
@@ -231,11 +232,6 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("failed to derive m/44'/0'/1' — Account=1 (hardened) key: %w", err)
 	}
 
-	masterKeyBytes, err = masterKey.Serialize()
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize masterkey: %w", err)
-	}
-
 	opKeyBytes, err = keyAccount0.Serialize()
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize keyAccount0: %w", err)
@@ -246,17 +242,17 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("failed to serialize keyAccount1: %w", err)
 	}
 
-	// ========== 步骤 5: 使用方案二加密3个变量 (datakey + AES-GCM) ==========
-	// 主密钥
+	// ========== 步骤 5: 使用信封加密的方式 加密 seed 和两个派生密钥 (datakey + AES-GCM) ==========
+	// 主密钥 seed
 	mkBip44Path, err := hdwallet.MasterKeyPath(chainCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate %s master key path: %w", chainCode, err)
 	}
 	mkPathContext := transit.Bip44PathToContext(mkBip44Path)
-	masterCiphertext, masterDEKCiphertext, err := s.encryptWithDataKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), masterKeyBytes, mkPathContext)
+	masterSeedCiphertext, masterSeedDEKCiphertext, err := s.encryptWithDataKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), seed, mkPathContext)
 	if err != nil {
 		log.Error("Failed to encrypt master key seed with envelope encryption", "error", err, "trace_id", traceId, "chain_code", chainCode)
-		return nil, fmt.Errorf("failed to encrypt masterkey: %w", err)
+		return nil, fmt.Errorf("failed to encrypt master key seed: %w", err)
 	}
 
 	// 运营私钥
@@ -287,10 +283,10 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 
 	// ========== 步骤 6: 返回响应 ==========
 	return &proto.GenesisResponse{
-		Bip32KeyCiphertext: masterCiphertext,
-		DekCiphertext:      masterDEKCiphertext,
-		Context:            mkPathContext,
-		Bip44Path:          mkBip44Path,
+		SeedCiphertext: masterSeedCiphertext,
+		DekCiphertext:  masterSeedDEKCiphertext,
+		Context:        mkPathContext,
+		Bip44Path:      mkBip44Path,
 		DerivedKeys: []*proto.DerivedCoreKey{
 			{
 				KeyUsage:           keyutil.KEY_USAGE_OPERATIONAL.ToUin32(),
@@ -310,18 +306,19 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 	}, nil
 }
 
-// deriveFifthDepthChildKeys 从主密钥{@link bip32keyCiphertext}派生它的第五层（account_index）密钥
+// deriveFifthDepthChildKeys 从主密钥 seed 密文派生第五层（account_index）密钥
 // 流程：
-//  1. 使用 s.kmsServ.Decrypt 对 {@link bip32keyCiphertext} 进行解密，的到 PEM 格式密钥
-//  2. 从 PEM 格式的密钥反序列化出 bip32.key 类型密钥
-//  3. 使用主密钥和{@link addrIdxStart}派生，得到 bip32.key 类型的密钥
-//  4. 将得到的新密钥转换为 PEM 格式
-//  5. 使用 s.kmsServ.Encrypt 对已序列化为 PEM 格式的密钥加密，
-//     使用{@link transitName} 指定 transit 引擎路径；
-//  6. 签名后立即清零所有明文私钥
+//  1. 使用 s.kmsServ.Decrypt 对父密钥密文进行解密，得到原始字节
+//  2. 从字节重建 bip32.Key（seed → NewMasterKey，或序列化字节 → Deserialize）
+//  3. 使用主密钥和 addrIdxStart 派生，得到 bip32.Key 类型的密钥
+//  4. 将得到的新密钥转换为 DER 格式
+//  5. 使用 s.kmsServ.Encrypt 对已序列化为 DER 格式的密钥加密，
+//     使用 transitName 指定 transit 引擎路径；
+//  6. 立即擦除所有明文私钥和 seed
 //
 // 安全要点：
-//   - 私钥明文仅在 KeyCreatorService 内存中短暂存在
+//   - seed 包含主密钥的全部熵，必须在内存中显式擦除后方可释放；
+//   - 私钥明文仅在 KeyCreatorService 内存中短暂存在；
 //   - 对于 Vault 系统，不同的 transit 拥有较高的安全隔绝设计，将运营和用户的密钥区分开，能更好的
 //     对权限进行控制。
 func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyRequest, transitName, keyName, context string, algo algorithm.KeyAlgorithm) (*proto.CreateKeyResponse, error) {
@@ -331,25 +328,38 @@ func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyReques
 	bip32keyCiphertext := req.Bip32KeyCiphertext
 
 	// 调用 vault 系统解密
-	// plaintext 是 string 类型，不可变且无法就地清零。base64.StdEncoding.DecodeString 会申请新内存并复制数据，
-	// 私钥的最终二进制形态存储在 keyBytes 中（已通过 defer hdwallet.ClearBytes 保护）。
-	// plaintext 依赖 GC 回收。
+	// plaintext 是 string 类型，不可变且无法就地擦除。base64.StdEncoding.DecodeString 会申请新内存并复制数据，
+	// 明文的最终二进制形态存储在 keyBytes 中（已通过 defer securestore.Memzero 保护）。
+	// plaintext 则依赖 GC 回收。
 	plaintext, err := s.kmsServ.Decrypt(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), bip32keyCiphertext, context)
 	if err != nil {
 		return nil, err
 	}
 
-	// 将解密的密钥转为 bip32.key 类型
+	// 将解密的密钥转为 bip32.Key 类型
 	// Vault Decrypt 端点返回的 plaintext 是 base64 编码的明文，需要 base64 解码
 	keyBytes, err := base64.StdEncoding.DecodeString(plaintext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode private key from base64: %w", err)
+		return nil, fmt.Errorf("failed to decode key from base64: %w", err)
 	}
 	defer securestore.Memzero(keyBytes)
 
-	bip32AccountKey, err := bip32.Deserialize(keyBytes)
-	if err != nil {
-		return nil, err
+	// 根据字节长度判断来源：
+	// - 16~32 字节：seed → NewMasterKey
+	// - 82 字节：bip32 序列化字节 → Deserialize
+	var bip32AccountKey *bip32.Key
+	if len(keyBytes) >= 16 && len(keyBytes) <= 32 {
+		bip32AccountKey, err = bip32.NewMasterKey(keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create master key from seed: %w", err)
+		}
+	} else if len(keyBytes) == 82 {
+		bip32AccountKey, err = bip32.Deserialize(keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to deserialize bip32 key: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("invalid key bytes length: %d (expected 16-32 for seed or 82 for serialized key)", len(keyBytes))
 	}
 	defer securestore.MemzeroBip32Key(bip32AccountKey)
 
@@ -379,7 +389,7 @@ func (s *KeyCreatorService) derive(bip32Change *bip32.Key, accountIndex uint32, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive child key at accountIndex %d : %w", accountIndex, err)
 	}
-	// 清零字节 childKey 密钥数据
+	// 擦除字节 childKey 密钥数据
 	defer securestore.MemzeroBip32Key(childKey)
 
 	privateKey, err := algo.NewPrivateKeyFromBytes(childKey.Key)
@@ -388,14 +398,14 @@ func (s *KeyCreatorService) derive(bip32Change *bip32.Key, accountIndex uint32, 
 	}
 
 	securePrivateKey := securestore.NewSecurePrivateKey(privateKey, childKey.Key, algo.AlgorithmID())
-	// 清零字节 privateKey 密钥数据
+	// 擦除字节 privateKey 密钥数据
 	defer securePrivateKey.Clear()
 
 	privateKeyDER, err := algo.SerializePrivateKey(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to serialize private key to PKCS8 DER at accountIndex %d : %w", accountIndex, err)
 	}
-	// 清零字节 privateKeyDER
+	// 擦除字节 privateKeyDER
 	defer securestore.Memzero(privateKeyDER)
 
 	bip44Path := hdwallet.ChildPath(context, hdwallet.ChangeExternal, accountIndex)

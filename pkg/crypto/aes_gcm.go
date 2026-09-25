@@ -12,7 +12,7 @@ const NonceSize = 12
 
 // Encrypt 使用 AES-256-GCM 加密数据
 // plaintext: 待加密数据, key: 32字节 AES-256 密钥
-// 返回: nonce (12字节) + ciphertext, 错误
+// 返回: nonce (12字节), ciphertext
 func Encrypt(plaintext, key []byte) (nonce, ciphertext []byte, err error) {
 	if len(key) != 32 {
 		return nil, nil, fmt.Errorf("invalid key length: expected 32, got %d", len(key))
@@ -39,7 +39,7 @@ func Encrypt(plaintext, key []byte) (nonce, ciphertext []byte, err error) {
 
 // Decrypt 使用 AES-256-GCM 解密数据
 // ciphertext: 密文, nonce: 12字节随机数, key: 32字节 AES-256 密钥
-// 返回: 明文, 错误
+// 返回: 明文
 func Decrypt(ciphertext, nonce, key []byte) ([]byte, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("invalid key length: expected 32, got %d", len(key))

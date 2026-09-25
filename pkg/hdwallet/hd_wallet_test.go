@@ -6,7 +6,7 @@ import (
 
 func TestGenerateBip32Key(t *testing.T) {
 	t.Run("generates valid key", func(t *testing.T) {
-		key, err := GenerateBip32Key()
+		key, _, err := GenerateBip32Key()
 		if err != nil {
 			t.Fatalf("GenerateBip32Key() error = %v", err)
 		}
@@ -22,11 +22,11 @@ func TestGenerateBip32Key(t *testing.T) {
 	})
 
 	t.Run("generates different keys", func(t *testing.T) {
-		key1, err := GenerateBip32Key()
+		key1, _, err := GenerateBip32Key()
 		if err != nil {
 			t.Fatalf("GenerateBip32Key() error = %v", err)
 		}
-		key2, err := GenerateBip32Key()
+		key2, _, err := GenerateBip32Key()
 		if err != nil {
 			t.Fatalf("GenerateBip32Key() error = %v", err)
 		}
@@ -341,7 +341,7 @@ func TestCoinTypes(t *testing.T) {
 func TestDeriveChildKey(t *testing.T) {
 	t.Skip("requires bip32.Key and derivation logic - demonstrates integration pattern")
 
-	key, err := GenerateBip32Key()
+	key, _, err := GenerateBip32Key()
 	if err != nil {
 		t.Fatalf("GenerateBip32Key() error = %v", err)
 	}
@@ -403,7 +403,7 @@ func TestIntegration(t *testing.T) {
 }
 
 func TestBip32KeyProperties(t *testing.T) {
-	key, err := GenerateBip32Key()
+	key, _, err := GenerateBip32Key()
 	if err != nil {
 		t.Fatalf("GenerateBip32Key() error = %v", err)
 	}

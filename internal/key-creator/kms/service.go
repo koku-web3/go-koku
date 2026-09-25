@@ -240,7 +240,7 @@ func isKeyExistsError(err error) bool {
 // keyName: 密钥名称 (如 ethereum-masterkey)
 // context: 密钥派生上下文
 // count: 批量生成数量（建议单次不超过100）
-// 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀), 错误
+// 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀)
 func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32) (datakeys []DataKey, err error) {
 	if strings.TrimSpace(transitName) == "" {
 		return nil, fmt.Errorf("transitName cannot be empty")
@@ -306,7 +306,7 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32
 // keyName: 密钥名称
 // ciphertext: GenerateDataKey返回的ciphertext
 // context: 密钥派生上下文
-// 返回: plaintext (base64 DEK明文), 错误
+// 返回: plaintext (base64 DEK明文)
 func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (string, error) {
 	decryptPath := fmt.Sprintf("transit/%s/decrypt/%s", transitName, keyName)
 

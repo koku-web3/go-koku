@@ -9,9 +9,10 @@ services:
   # ==================================================================
   vault-base:
     volumes:
-      - vault-config:/vault/config
+      - ./local-config/hcl:/vault/config/hcl:ro
+      - ./local-config/policy:/vault/config/policy:ro
       - ./local-config/certs:/vault/certs:ro
-      - ./local-config/encryption:/vault/encryption:ro # 挂载持久化配置卷
+      - ./local-config/encryption:/vault/encryption:ro
     env_file:
       - path: ./vault.env # 引入公共环境变量
         required: true

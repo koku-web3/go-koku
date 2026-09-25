@@ -52,7 +52,7 @@ message GenesisRequest {
 }
 
 message GenesisResponse {
-  string bip32key_ciphertext = 1; // 加密后的bip32主密钥 hex 格式
+  string seed_ciphertext = 1; // HD seed 经 Vault 信封加密后的密文
   string context = 2; // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
   string bip44_path = 3; // BIP-44 路径字符串
   string dek_ciphertext = 4; // DEK 数据加密密钥，用于信封加密

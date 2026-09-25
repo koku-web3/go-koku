@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/tyler-smith/go-bip32"
-
-	"github.com/koku-web3/go-koku/pkg/securestore"
 )
 
 const (
@@ -55,20 +53,24 @@ var CoinTypes = map[string]uint32{
 
 // GenerateBip32Key 生成一个新的 HD 主密钥
 // 使用 cryptographically secure random 作为种子。
-// 生成后立即对 seed 底层数组注册 defer 清零;同时 NewMasterKeyFromSeed 内部也会清零
-// HMAC-SHA512 的 64 字节中间结果。
-func GenerateBip32Key() (*bip32.Key, error) {
-	seed := make([]byte, 32)
+//
+// 返回值：
+//   - master: BIP-32 主密钥，可直接用于派生子密钥
+//   - seed: 32 字节原始种子，调用方负责在 defer 中通过 securestore.Memzero 擦除
+//   - err: 错误信息
+//
+// 安全要点：seed 包含主密钥的全部熵，必须在内存中显式擦除后方可释放。
+func GenerateBip32Key() (master *bip32.Key, seed []byte, err error) {
+	seed = make([]byte, 32)
 	if _, err := rand.Read(seed); err != nil {
-		return nil, fmt.Errorf("failed to generate random seed: %w", err)
+		return nil, nil, fmt.Errorf("failed to generate random seed: %w", err)
 	}
-	defer securestore.Memzero(seed)
 
 	if len(seed) < 16 || len(seed) > 32 {
-		return nil, fmt.Errorf("seed length must be between 16 and 32 bytes")
+		return nil, nil, fmt.Errorf("seed length must be between 16 and 32 bytes")
 	}
-	master, err := bip32.NewMasterKey(seed)
-	return master, err
+	master, err = bip32.NewMasterKey(seed)
+	return master, seed, err
 }
 
 // OperationsPath 返回运营账号 Account 层级的 BIP-44 路径字符串

@@ -19,11 +19,12 @@ type Client struct {
 }
 
 type GenesisResult struct {
-	TraceID            string
-	Bip32KeyCiphertext string
-	Context            string
-	Bip44Path          string
-	DerivedKeys        []DerivedCoreKeyResult
+	TraceID        string
+	SeedCiphertext string
+	DekCiphertext  string
+	Context        string
+	Bip44Path      string
+	DerivedKeys    []DerivedCoreKeyResult
 }
 
 type DerivedCoreKeyResult struct {
@@ -115,11 +116,12 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 	}
 
 	return &GenesisResult{
-		TraceID:            traceID,
-		Bip32KeyCiphertext: resp.Bip32KeyCiphertext,
-		Context:            resp.Context,
-		Bip44Path:          resp.Bip44Path,
-		DerivedKeys:        derivedKeys,
+		TraceID:        traceID,
+		SeedCiphertext: resp.GetSeedCiphertext(),
+		DekCiphertext:  resp.GetDekCiphertext(),
+		Context:        resp.GetContext(),
+		Bip44Path:      resp.GetBip44Path(),
+		DerivedKeys:    derivedKeys,
 	}, nil
 }
 

@@ -210,7 +210,6 @@ func (k *KMS) Encrypt(transitName, keyName string, plaintext []byte, context str
 		return "", fmt.Errorf("failed to encrypt data: %w", err)
 	}
 
-	// 验证响应
 	if secret == nil || secret.Data == nil {
 		return "", fmt.Errorf("empty response from Vault during encryption")
 	}
@@ -239,7 +238,7 @@ func isKeyExistsError(err error) bool {
 // keyName: 密钥名称 (如 ethereum-masterkey)
 // context: 密钥派生上下文
 // count: 批量生成数量（建议单次不超过100）
-// 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀), 错误
+// 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀)
 func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32) (datakeys []DataKey, err error) {
 	datakeyPath := fmt.Sprintf("transit/%s/datakey/plaintext/%s", transitName, keyName)
 
@@ -280,7 +279,7 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32
 // keyName: 密钥名称
 // ciphertext: GenerateDataKey返回的ciphertext
 // context: 密钥派生上下文
-// 返回: plaintext (base64 DEK明文), 错误
+// 返回: plaintext (base64 DEK明文)
 func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (string, error) {
 	decryptPath := fmt.Sprintf("transit/%s/decrypt/%s", transitName, keyName)
 

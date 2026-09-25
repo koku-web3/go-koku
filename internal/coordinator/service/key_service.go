@@ -57,12 +57,13 @@ func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error 
 	}
 
 	masterKey := &model.MasterKey{
-		ChainCode:          in.ChainCode,
-		KeyType:            in.KeyType,
-		Bip32KeyCiphertext: result.Bip32KeyCiphertext,
-		Context:            result.Context,
-		Bip44Path:          result.Bip44Path,
-		IsDeleted:          false,
+		ChainCode:      in.ChainCode,
+		KeyType:        in.KeyType,
+		SeedCiphertext: result.SeedCiphertext,
+		DEK_Ciphertext: result.DekCiphertext,
+		Context:        result.Context,
+		Bip44Path:      result.Bip44Path,
+		IsDeleted:      false,
 	}
 
 	coreKeys := make([]*model.CoreKey, 0, len(result.DerivedKeys))

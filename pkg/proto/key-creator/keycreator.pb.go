@@ -323,14 +323,14 @@ func (x *GenesisRequest) GetKeyType() string {
 }
 
 type GenesisResponse struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Bip32KeyCiphertext string                 `protobuf:"bytes,1,opt,name=bip32key_ciphertext,json=bip32keyCiphertext,proto3" json:"bip32key_ciphertext,omitempty"` // 加密后的bip32主密钥 hex 格式
-	Context            string                 `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`                                                 // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
-	Bip44Path          string                 `protobuf:"bytes,3,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                            // BIP-44 路径字符串
-	DekCiphertext      string                 `protobuf:"bytes,4,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`                // DEK 数据加密密钥，用于信封加密
-	DerivedKeys        []*DerivedCoreKey      `protobuf:"bytes,5,rep,name=derived_keys,json=derivedKeys,proto3" json:"derived_keys,omitempty"`                      // 派生的密钥列表 (运营账户和用户账户)
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SeedCiphertext string                 `protobuf:"bytes,1,opt,name=seed_ciphertext,json=seedCiphertext,proto3" json:"seed_ciphertext,omitempty"` // HD seed 经 Vault 信封加密后的密文
+	Context        string                 `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`                                     // 密钥派生上下文标识符，1-36必填，唯一；在 vault 系统加解密时使用；格式类似：m-44-60-0-0-0
+	Bip44Path      string                 `protobuf:"bytes,3,opt,name=bip44_path,json=bip44Path,proto3" json:"bip44_path,omitempty"`                // BIP-44 路径字符串
+	DekCiphertext  string                 `protobuf:"bytes,4,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`    // DEK 数据加密密钥，用于信封加密
+	DerivedKeys    []*DerivedCoreKey      `protobuf:"bytes,5,rep,name=derived_keys,json=derivedKeys,proto3" json:"derived_keys,omitempty"`          // 派生的密钥列表 (运营账户和用户账户)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GenesisResponse) Reset() {
@@ -363,9 +363,9 @@ func (*GenesisResponse) Descriptor() ([]byte, []int) {
 	return file_proto_keycreator_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GenesisResponse) GetBip32KeyCiphertext() string {
+func (x *GenesisResponse) GetSeedCiphertext() string {
 	if x != nil {
-		return x.Bip32KeyCiphertext
+		return x.SeedCiphertext
 	}
 	return ""
 }
@@ -563,9 +563,9 @@ const file_proto_keycreator_proto_rawDesc = "" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
 	"chain_code\x18\x02 \x01(\tR\tchainCode\x12\x19\n" +
-	"\bkey_type\x18\x03 \x01(\tR\akeyType\"\xe1\x01\n" +
-	"\x0fGenesisResponse\x12/\n" +
-	"\x13bip32key_ciphertext\x18\x01 \x01(\tR\x12bip32keyCiphertext\x12\x18\n" +
+	"\bkey_type\x18\x03 \x01(\tR\akeyType\"\xd9\x01\n" +
+	"\x0fGenesisResponse\x12'\n" +
+	"\x0fseed_ciphertext\x18\x01 \x01(\tR\x0eseedCiphertext\x12\x18\n" +
 	"\acontext\x18\x02 \x01(\tR\acontext\x12\x1d\n" +
 	"\n" +
 	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12%\n" +
