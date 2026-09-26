@@ -21,7 +21,7 @@ type Client struct {
 type GenesisResult struct {
 	TraceID        string
 	SeedCiphertext string
-	DekCiphertext  string
+	DEKCiphertext  string // 加解密 Bip32KeyCiphertext 的密钥
 	Context        string
 	Bip44Path      string
 	DerivedKeys    []DerivedCoreKeyResult
@@ -30,6 +30,7 @@ type GenesisResult struct {
 type DerivedCoreKeyResult struct {
 	KeyUsage           uint32
 	Bip32KeyCiphertext string
+	DEKCiphertext      string // 加解密 Bip32KeyCiphertext 的密钥
 	Context            string
 	Bip44Path          string
 }
@@ -40,6 +41,7 @@ type CreateKeyResult struct {
 
 type DerivedChildKeyResult struct {
 	PrivKeyCiphertext string
+	DEKCiphertext     string // 加解密 Bip32KeyCiphertext 的密钥
 	PublicKey         string
 	AccountIndex      uint32
 	Context           string
@@ -110,6 +112,7 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 		derivedKeys = append(derivedKeys, DerivedCoreKeyResult{
 			KeyUsage:           dk.KeyUsage,
 			Bip32KeyCiphertext: dk.Bip32KeyCiphertext,
+			DEKCiphertext:      dk.DekCiphertext,
 			Context:            dk.Context,
 			Bip44Path:          dk.Bip44Path,
 		})
@@ -118,47 +121,62 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 	return &GenesisResult{
 		TraceID:        traceID,
 		SeedCiphertext: resp.GetSeedCiphertext(),
-		DekCiphertext:  resp.GetDekCiphertext(),
+		DEKCiphertext:  resp.GetDekCiphertext(),
 		Context:        resp.GetContext(),
 		Bip44Path:      resp.GetBip44Path(),
 		DerivedKeys:    derivedKeys,
 	}, nil
 }
 
-func (c *Client) CreateOperationalKey(ctx context.Context, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, keyType string) (*CreateKeyResult, error) {
-	return c.createKey(ctx, "Operational", c.keyCreator.CreateOperationalKey, traceID, chainCode, bip44Path, accountIndexStart, count, bip32keyCiphertext, keyType)
-}
-
-func (c *Client) CreateUserKey(ctx context.Context, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, keyType string) (*CreateKeyResult, error) {
-	return c.createKey(ctx, "User", c.keyCreator.CreateUserKey, traceID, chainCode, bip44Path, accountIndexStart, count, bip32keyCiphertext, keyType)
+type CreateKeyParams struct {
+	TraceID            string
+	ChainCode          string
+	Bip44Path          string
+	AccountIndexStart  uint32
+	Count              uint32
+	Bip32KeyCiphertext string
+	DEKCiphertext      string
+	AlgoType           string
 }
 
 type createKeyFunc func(context.Context, *kvgrpc.CreateKeyRequest, ...grpc.CallOption) (*kvgrpc.CreateKeyResponse, error)
 
-func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc, traceID, chainCode, bip44Path string, accountIndexStart, count uint32, bip32keyCiphertext, algoType string) (*CreateKeyResult, error) {
-	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path, "account_index_start", accountIndexStart, "count", count)
+func (c *Client) CreateOperationalKey(ctx context.Context, params CreateKeyParams) (*CreateKeyResult, error) {
+	return c.createKey(ctx, "Operational", c.keyCreator.CreateOperationalKey, params)
+}
 
-	if traceID == "" {
+func (c *Client) CreateUserKey(ctx context.Context, params CreateKeyParams) (*CreateKeyResult, error) {
+	return c.createKey(ctx, "User", c.keyCreator.CreateUserKey, params)
+}
+
+func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc, params CreateKeyParams) (*CreateKeyResult, error) {
+	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", params.TraceID, "chain_code", params.ChainCode, "bip44_path", params.Bip44Path, "account_index_start", params.AccountIndexStart, "count", params.Count)
+
+	if params.TraceID == "" {
 		return nil, fmt.Errorf("trace_id is required")
 	}
-	if chainCode == "" {
+	if params.ChainCode == "" {
 		return nil, fmt.Errorf("chain_code is required")
 	}
-	if bip32keyCiphertext == "" {
+	if params.Bip32KeyCiphertext == "" {
 		return nil, fmt.Errorf("bip32key_ciphertext is required")
+	}
+	if params.DEKCiphertext == "" {
+		return nil, fmt.Errorf("dek_ciphertext is required")
 	}
 
 	resp, err := fn(ctx, &kvgrpc.CreateKeyRequest{
-		TraceId:            traceID,
-		ChainCode:          chainCode,
-		Bip44Path:          bip44Path,
-		AccountIndexStart:  accountIndexStart,
-		Count:              count,
-		Bip32KeyCiphertext: bip32keyCiphertext,
-		KeyType:            algoType,
+		TraceId:            params.TraceID,
+		ChainCode:          params.ChainCode,
+		Bip44Path:          params.Bip44Path,
+		AccountIndexStart:  params.AccountIndexStart,
+		Count:              params.Count,
+		Bip32KeyCiphertext: params.Bip32KeyCiphertext,
+		DekCiphertext:      params.DEKCiphertext,
+		KeyType:            params.AlgoType,
 	})
 	if err != nil {
-		log.Error(fmt.Sprintf("Call key-creator server to create %s Key failed", keyType), "trace_id", traceID, "error", err.Error())
+		log.Error(fmt.Sprintf("Call key-creator server to create %s Key failed", keyType), "trace_id", params.TraceID, "error", err.Error())
 		return nil, fmt.Errorf("call key-creator server to Create%sKey failed: %w", keyType, err)
 	}
 
@@ -170,6 +188,7 @@ func parseCreateKeyResponse(resp *kvgrpc.CreateKeyResponse) *CreateKeyResult {
 	for _, k := range resp.Keys {
 		keys = append(keys, DerivedChildKeyResult{
 			PrivKeyCiphertext: k.PrivKeyCiphertext,
+			DEKCiphertext:     k.DekCiphertext,
 			PublicKey:         k.PublicKey,
 			AccountIndex:      k.AddressIndex,
 			Context:           k.Context,

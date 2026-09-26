@@ -137,29 +137,13 @@ sh deploy.sh
 
 格式：`transit/{transit_name}/{key_name}`
 
-- `transit/core/{chainCode}-masterkey` **负责核心密钥：** 一个区块链对应一把主密钥，遵循BIP-44规则派生；主密钥的种子（Seed）、该Seed派生的两把密钥（account为 0 和 1） 使用此引擎下派生的密钥进行加解密。
+- `transit/core/{chainCode}-seed` **负责核心主密钥种子：** 一个区块链对应一个随机种子，遵循BIP-44规则派生；使用该种子可以派生出该链下所有的子密钥。
 - `transit/operations/{chainCode}-privkey` **负责运营密钥：** 包括财务密钥、归集地址密钥、手续费地址密钥等；使用此引擎下派生的密钥进行加解密。
 - `transit/user/{chainCode}-privkey` **负责用户密钥** 用户充值、提现地址密钥；使用此引擎下派生的密钥进行加解密。
 
 其中：
 
 - {transit_name}：core、operations、user
-- {key_name}：{chainCode}-masterkey、{chainCode}-privkey、{chainCode}-privkey
-
-**示例**
-
-加密的路径格式为：`transit/{transit_name}/encrypt/{key_name}`。
-
-以下展示 Ethereum 对**主密钥种子**进行加密
-
-```bash
- curl --header "X-Vault-Token: hvs.g1bZWi6flTJdB5GZopREVdBU" \
-     --request POST \
-     --data '{
-       "plaintext": "MTIzNDU2Nzg5MA==",
-       "context": "ZXRoZXJldW0tdGVzdC11c2VyLTE="
-     }' \
-     http://127.0.0.1:8200/v1/transit/core/encrypt/masterkey
-```
+- {key_name}：{chainCode}-seed、{chainCode}-privkey、{chainCode}-privkey
 
 **关于 Transit 的更多信息参考 [https://developer.hashicorp.com/vault/api-docs/secret/transit](https://developer.hashicorp.com/vault/api-docs/secret/transit)**

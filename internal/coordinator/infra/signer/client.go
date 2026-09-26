@@ -60,15 +60,17 @@ type SignResult struct {
 	Signature string
 }
 
-func (c *Client) SignAcct0(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string) (*SignResult, error) {
-	return c.signCommon(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, c.signer.SignAcct0)
+func (c *Client) SignAcct0(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string) (*SignResult, error) {
+	return c.sign(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext, c.signer.SignAcct0)
 }
 
-func (c *Client) SignAcct1(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string) (*SignResult, error) {
-	return c.signCommon(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, c.signer.SignAcct1)
+func (c *Client) SignAcct1(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string) (*SignResult, error) {
+	return c.sign(ctx, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext, c.signer.SignAcct1)
 }
 
-func (c *Client) signCommon(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext string, signFn func(context.Context, *signergrpc.SignRequest, ...grpc.CallOption) (*signergrpc.SignResponse, error)) (*SignResult, error) {
+type signFn func(context.Context, *signergrpc.SignRequest, ...grpc.CallOption) (*signergrpc.SignResponse, error)
+
+func (c *Client) sign(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string, signFunc signFn) (*SignResult, error) {
 	log.Info("Signing request", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
 
 	if bip44Path == "" {
@@ -85,9 +87,10 @@ func (c *Client) signCommon(ctx context.Context, traceID, chainCode, bip44Path, 
 		KeyType:           keyType,
 		Message:           message,
 		PrivKeyCiphertext: privKeyCiphertext,
+		DekCiphertext:     dekCiphertext,
 	}
 	signStart := time.Now()
-	resp, err := signFn(ctx, req)
+	resp, err := signFunc(ctx, req)
 	signCost := time.Since(signStart)
 	log.Info("Sign completed", "time_cost_us", signCost.Microseconds(), "success", err == nil)
 	if err != nil {

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `chains` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `chain_code` VARCHAR(36) NOT NULL COMMENT '区块链代码，如 bitcoin、ethereum',
     `base_coin` VARCHAR(10) NOT NULL COMMENT '主链币，如 btc、eth',
+    `key_type` VARCHAR(36) NOT NULL COMMENT '密钥类型,如 ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519',
     `rpc_url` VARCHAR(256) NOT NULL COMMENT '区块链RPC地址',
     `explorer_url` VARCHAR(256) COMMENT '区块链浏览器地址',
     `website_url` VARCHAR(256) COMMENT '官方网站地址',
@@ -36,14 +37,16 @@ CREATE TABLE IF NOT EXISTS `chains` (
 INSERT INTO `chains` (
     `chain_code`,
     `base_coin`,
+    `key_type`,
     `rpc_url`,
     `explorer_url`,
     `confirmation_count`,
-    `tx_builder_serv_g_rpc`,
+    `tx_builder_serv_grpc`,
     `tx_builder_serv_http`
 ) VALUES (
     'ethereum',
     'eth',
+    'ecdsa-secp256k1',
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://sepolia.etherscan.io/',
     12,
@@ -54,5 +57,5 @@ INSERT INTO `chains` (
     `rpc_url` = VALUES(`rpc_url`),
     `explorer_url` = VALUES(`explorer_url`),
     `confirmation_count` = VALUES(`confirmation_count`),
-    `tx_builder_serv_g_rpc` = VALUES(`tx_builder_serv_g_rpc`),
+    `tx_builder_serv_grpc` = VALUES(`tx_builder_serv_grpc`),
     `tx_builder_serv_http` = VALUES(`tx_builder_serv_http`);

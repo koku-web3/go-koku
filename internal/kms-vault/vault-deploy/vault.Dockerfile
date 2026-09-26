@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # 基础镜像：开源版 FROM hashicorp/vault:<version_tag>
-FROM hashicorp/vault:2.0
+FROM hashicorp/vault:2.1
 
 # ---------- 显式切换为 root，获得文件操作权限 ----------
 # 因为hashicorp/vault:2.0以 vault 用户运行

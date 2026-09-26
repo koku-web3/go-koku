@@ -49,7 +49,6 @@ message HealthCheckResponse {
 message GenesisRequest {
   string trace_id = 1; // 链路跟踪 ID，1-36 必填
   string chain_code = 2; // 区块链代码，1-36 必填
-  string key_type = 3; // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 }
 
 message GenesisResponse {

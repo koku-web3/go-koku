@@ -15,7 +15,7 @@ import (
 	proto "github.com/koku-web3/go-koku/pkg/proto/signer"
 	"github.com/koku-web3/go-koku/pkg/securestore"
 	"github.com/koku-web3/go-koku/pkg/securestore/algorithm"
-	"github.com/koku-web3/go-koku/pkg/vault/transit.go"
+	"github.com/koku-web3/go-koku/pkg/vault/transit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
@@ -95,7 +95,9 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 		"key_type", req.KeyType,
 		"bip44_path", req.Bip44Path,
 		"message", req.Message,
-		"priv_key_ciphertext_len", len(req.PrivKeyCiphertext))
+		"DekCiphertext_len", len(req.DekCiphertext),
+		"priv_key_ciphertext_len", len(req.PrivKeyCiphertext),
+	)
 
 	// 入参校验
 	if err := validateSignRequest(req); err != nil {
@@ -140,7 +142,7 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 	// 解密 DEK
 	dekPlaintext, err := s.kmsServ.DecryptDataKey(transitName, keyName, dekCiphertext, context)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt data key failed: %w", err)
+		return nil, err
 	}
 
 	dekBytes, err := base64.StdEncoding.DecodeString(dekPlaintext)
@@ -208,6 +210,9 @@ func validateSignRequest(req *proto.SignRequest) error {
 	}
 	if req.PrivKeyCiphertext == "" {
 		errors = append(errors, "priv_key_ciphertext is required")
+	}
+	if req.DekCiphertext == "" {
+		errors = append(errors, "dek_ciphertext is required")
 	}
 
 	// 验证 keyType 是否支持

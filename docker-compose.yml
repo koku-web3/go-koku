@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ---------------------------------------------------------------------------
   # MySQL 8.0 — persists all key / chain / audit data
@@ -17,7 +15,7 @@ services:
     volumes:
       # Initialise schema on first boot (GORM AutoMigrate also creates tables on
       # coordinator startup, so this is a belt-and-suspenders backup).
-      - ./migrations/001_create_keys_tables.sql:/docker-entrypoint-initdb.d/001_create_keys_tables.sql:ro
+      - ./scripts/sql/001_init.sql:ro
       - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukoku", "-pkoku_pwd"]
@@ -68,10 +66,6 @@ services:
       - ./certs:/etc/koku/certs:ro
     networks:
       - koku-net
-    depends_on:
-      # Signer depends on Vault which is excluded from this compose, so we
-      # start it regardless and let it retry until Vault is available.
-      - coordinator
 
   # ---------------------------------------------------------------------------
   # Key-Creator — HD key generation service (gRPC :50053)
@@ -90,9 +84,6 @@ services:
       - ./certs:/etc/koku/certs:ro
     networks:
       - koku-net
-    depends_on:
-      # Same as signer — depends on Vault which is excluded.
-      - coordinator
 
   # ---------------------------------------------------------------------------
   # Coordinator — main orchestration service (gRPC :50051)

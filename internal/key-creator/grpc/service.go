@@ -19,7 +19,7 @@ import (
 	proto "github.com/koku-web3/go-koku/pkg/proto/key-creator"
 	"github.com/koku-web3/go-koku/pkg/securestore"
 	"github.com/koku-web3/go-koku/pkg/securestore/algorithm"
-	"github.com/koku-web3/go-koku/pkg/vault/transit.go"
+	"github.com/koku-web3/go-koku/pkg/vault/transit"
 	"github.com/tyler-smith/go-bip32"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -176,7 +176,16 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("unsupported %s chain for BIP-44", chainCode)
 	}
 
-	// ========== 步骤 1: 生成 HD 主密钥 seed ==========
+	// ========== 步骤 1: 调用 vault 服务创建3把key ==========
+	// 分别对应：
+	//		   transit/core/{chainCode}-masterkey
+	//		   transit/operations/{chainCode}-privkey
+	//		   transit/user/{chainCode}-privkey
+	if err := s.createVaultKeys(chainCode); err != nil {
+		return nil, fmt.Errorf("call vault service to create 3 keys failed: %s", err.Error())
+	}
+
+	// ========== 步骤 2: 生成 HD 主密钥 seed ==========
 	var (
 		masterKey    *bip32.Key
 		key44        *bip32.Key
@@ -218,14 +227,14 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 		return nil, fmt.Errorf("failed to derive m/44'/0' — CoinType (hardened) key: %w", err)
 	}
 
-	// ========== 步骤 2: 派生运营账户私钥 ==========
+	// ========== 步骤 3: 派生运营账户私钥 ==========
 	// m/44'/0'/0' — Account=0 (hardened)
 	keyAccount0, err = key44Coin.NewChildKey(hdwallet.HardenedMark + hdwallet.AccountOperations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive m/44'/0'/0' — Account=0 (hardened) key: %w", err)
 	}
 
-	// ========== 步骤 3: 派生用户账户私钥  ==========
+	// ========== 步骤 4: 派生用户账户私钥  ==========
 	// m/44'/0'/1' — Account=1 (hardened)
 	keyAccount1, err = key44Coin.NewChildKey(hdwallet.HardenedMark + hdwallet.AccountUser)
 	if err != nil {
@@ -306,14 +315,31 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 	}, nil
 }
 
-// deriveFifthDepthChildKeys 从主密钥 seed 密文派生第五层（account_index）密钥
+func (s *KeyCreatorService) createVaultKeys(chainCode string) error {
+	err := s.kmsServ.CreateKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), transit.DataEncryptionKeyType, true)
+	if err != nil {
+		return err
+	}
+
+	err = s.kmsServ.CreateKey(transit.OperationsTransit, transit.GetKeyNameForOperations(chainCode), transit.DataEncryptionKeyType, true)
+	if err != nil {
+		return err
+	}
+
+	err = s.kmsServ.CreateKey(transit.UserTransit, transit.GetKeyNameForUser(chainCode), transit.DataEncryptionKeyType, true)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// deriveFifthDepthChildKeys 从父密钥m/44'/60'/0' 或 m/44'/60'/1' 派生第五层（account_index）密钥
 // 流程：
-//  1. 使用 s.kmsServ.Decrypt 对父密钥密文进行解密，得到原始字节
-//  2. 从字节重建 bip32.Key（seed → NewMasterKey，或序列化字节 → Deserialize）
-//  3. 使用主密钥和 addrIdxStart 派生，得到 bip32.Key 类型的密钥
+//  1. 使用 s.kmsServ.Decrypt 对父密钥的 DEK 数据（dek_ciphertext）进行解密
+//  2. 使用已解密的 DEK 对父私钥（bip32_key_ciphertext）进行解密（aes256-gcm96)
+//  3. 使用父密钥和 addrIdxStart 派生，得到 bip32.Key 类型的密钥
 //  4. 将得到的新密钥转换为 DER 格式
-//  5. 使用 s.kmsServ.Encrypt 对已序列化为 DER 格式的密钥加密，
-//     使用 transitName 指定 transit 引擎路径；
+//  5. 调用 vault 服务器（s.kmsServ.GenerateDataKey） 派生一个 data key 对已序列化为 DER 格式的密钥加密
 //  6. 立即擦除所有明文私钥和 seed
 //
 // 安全要点：
@@ -325,44 +351,53 @@ func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyReques
 	chainCode := req.ChainCode
 	addrIdxStart := req.AccountIndexStart
 	count := req.Count
-	bip32keyCiphertext := req.Bip32KeyCiphertext
 
-	// 调用 vault 系统解密
-	// plaintext 是 string 类型，不可变且无法就地擦除。base64.StdEncoding.DecodeString 会申请新内存并复制数据，
+	// dekPlaintext 是 string 类型，不可变且无法就地擦除。base64.StdEncoding.DecodeString 会申请新内存并复制数据，
 	// 明文的最终二进制形态存储在 keyBytes 中（已通过 defer securestore.Memzero 保护）。
-	// plaintext 则依赖 GC 回收。
-	plaintext, err := s.kmsServ.Decrypt(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), bip32keyCiphertext, context)
+	// dekPlaintext 则依赖 GC 回收。
+	dekPlaintext, err := s.kmsServ.Decrypt(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), req.DekCiphertext, context)
 	if err != nil {
 		return nil, err
 	}
 
-	// 将解密的密钥转为 bip32.Key 类型
-	// Vault Decrypt 端点返回的 plaintext 是 base64 编码的明文，需要 base64 解码
-	keyBytes, err := base64.StdEncoding.DecodeString(plaintext)
+	dekBytes, err := base64.StdEncoding.DecodeString(dekPlaintext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode key from base64: %w", err)
+		return nil, fmt.Errorf("decode DEK from base64 failed: %w", err)
 	}
-	defer securestore.Memzero(keyBytes)
+	defer securestore.Memzero(dekBytes)
 
-	// 根据字节长度判断来源：
-	// - 16~32 字节：seed → NewMasterKey
-	// - 82 字节：bip32 序列化字节 → Deserialize
-	var bip32AccountKey *bip32.Key
-	if len(keyBytes) >= 16 && len(keyBytes) <= 32 {
-		bip32AccountKey, err = bip32.NewMasterKey(keyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create master key from seed: %w", err)
-		}
-	} else if len(keyBytes) == 82 {
-		bip32AccountKey, err = bip32.Deserialize(keyBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to deserialize bip32 key: %w", err)
-		}
-	} else {
-		return nil, fmt.Errorf("invalid key bytes length: %d (expected 16-32 for seed or 82 for serialized key)", len(keyBytes))
+	// 解密私钥信封
+	// 私钥密文存入数据库时格式为： base64(nonce || encrypted)
+	//
+	// 其中
+	// nonce（IV）：是对称加密 aes256-gcm 的随机数
+	// encrypted：是 DER 格式的私钥密文
+	envelopeBytes, err := base64.StdEncoding.DecodeString(req.Bip32KeyCiphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt private key: %w", err)
+	}
+
+	if len(envelopeBytes) < aead.NonceSize {
+		return nil, fmt.Errorf("invalid envelope bytes length")
+	}
+
+	nonce := envelopeBytes[:aead.NonceSize]
+	encrypted := envelopeBytes[aead.NonceSize:]
+
+	privateDER, err := aead.Decrypt(encrypted, nonce, dekBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 string:%w", err)
+	}
+	// 清零私钥DER数据
+	defer securestore.Memzero(privateDER)
+
+	bip32AccountKey, err := bip32.Deserialize(privateDER)
+	if err != nil {
+		return nil, fmt.Errorf("failed to deserialize bip32 key: %w", err)
 	}
 	defer securestore.MemzeroBip32Key(bip32AccountKey)
 
+	// 已解密出父密钥，开始进行派生
 	// m/ 44'/ coinType'/ account'/ change （非强化）
 	bip32Change, err := bip32AccountKey.NewChildKey(hdwallet.ChangeExternal)
 	if err != nil {
@@ -383,6 +418,7 @@ func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyReques
 	return &proto.CreateKeyResponse{Keys: keys}, nil
 }
 
+// dervie 从指定父密钥派生单个密钥
 func (s *KeyCreatorService) derive(bip32Change *bip32.Key, accountIndex uint32, algo algorithm.KeyAlgorithm, context string, transitName string, keyName string) (*proto.DerivedChildKey, error) {
 	// m/ 44'/ coinType'/ account'/ change / accountIndex （非强化）
 	childKey, err := bip32Change.NewChildKey(accountIndex)
@@ -496,6 +532,9 @@ func validateCreateKeyRequest(req *proto.CreateKeyRequest) error {
 	if req.Bip32KeyCiphertext == "" {
 		errors = append(errors, "bip32key_ciphertext is required")
 	}
+	if req.DekCiphertext == "" {
+		errors = append(errors, "dek_ciphertext is required")
+	}
 	if req.Count == 0 || req.Count > 50 {
 		errors = append(errors, "count must be 1-50")
 	}
@@ -522,15 +561,12 @@ func encodePublicKeyToPEM(pubBytes []byte) string {
 // context: 密钥派生上下文
 // 返回: ciphertext (base64(nonce || encrypted)), dekCiphertext, 错误
 func (s *KeyCreatorService) encryptWithDataKey(transitName, keyName string, plaintext []byte, context string) (string, string, error) {
-	dekKeys, err := s.kmsServ.GenerateDataKey(transitName, keyName, context, 1)
+	dekKey, err := s.kmsServ.GenerateDataKey(transitName, keyName, context)
 	if err != nil {
 		return "", "", fmt.Errorf("generate data key failed: %w", err)
 	}
 
-	dekPlaintext := dekKeys[0].Plaintext
-	dekCiphertext := dekKeys[0].Ciphertext
-
-	dekBytes, err := base64.StdEncoding.DecodeString(dekPlaintext)
+	dekBytes, err := base64.StdEncoding.DecodeString(dekKey.Plaintext)
 	if err != nil {
 		return "", "", fmt.Errorf("decode DEK from base64 failed: %w", err)
 	}
@@ -548,5 +584,5 @@ func (s *KeyCreatorService) encryptWithDataKey(transitName, keyName string, plai
 	copy(envelope[len(nonce):], encrypted)
 
 	ciphertext := base64.StdEncoding.EncodeToString(envelope)
-	return ciphertext, dekCiphertext, nil
+	return ciphertext, dekKey.Ciphertext, nil
 }

@@ -8,4 +8,5 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient balance")
 	ErrGenesisExists       = errors.New("genesis already exists")
 	ErrNetwork             = errors.New("network error")
+	ErrChainNotFound       = errors.New("chain not found")
 )

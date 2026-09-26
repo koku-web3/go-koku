@@ -103,9 +103,9 @@ func (s *transferService) signAndBroadcast(ctx context.Context, in *types.Univer
 	var sigResult *signer.SignResult
 	var err error
 	if keyutil.KEY_USAGE_OPERATIONAL.ToUin32() == in.KeyUsage {
-		sigResult, err = s.signer.SignAcct0(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext)
+		sigResult, err = s.signer.SignAcct0(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext, key.DEK_Ciphertext)
 	} else {
-		sigResult, err = s.signer.SignAcct1(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext)
+		sigResult, err = s.signer.SignAcct1(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext, key.DEK_Ciphertext)
 	}
 	if err != nil {
 		return "", fmt.Errorf("%w: sign failed: %s", tx.ErrSignFailed, err)
@@ -131,9 +131,9 @@ func (s *transferService) UniversalTransfer(ctx context.Context, in *types.Unive
 		return nil, fmt.Errorf("%w: %s", tx.ErrInvalidParam, err)
 	}
 
-	mk, err := s.repo.GetMasterKeyByChainCode(ctx, in.ChainCode)
+	chain, err := s.repo.GetChainByCode(ctx, in.ChainCode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: get master key by chain code failed: %s", tx.ErrNetwork, err)
+		return nil, fmt.Errorf("%w: get chain key by chain code failed: %s", tx.ErrNetwork, err)
 	}
 
 	key, err := s.repo.GetKeyByAddress(ctx, in.ChainCode, in.FromAddress)
@@ -171,7 +171,7 @@ func (s *transferService) UniversalTransfer(ctx context.Context, in *types.Unive
 		return nil, err
 	}
 
-	txHash, err := s.signAndBroadcast(ctx, in, mk.KeyType, key, rawDataR)
+	txHash, err := s.signAndBroadcast(ctx, in, chain.KeyType, key, rawDataR)
 	if err != nil {
 		return nil, err
 	}

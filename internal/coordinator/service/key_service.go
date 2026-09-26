@@ -35,6 +35,11 @@ func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error 
 		return fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 
+	chain, err := s.repo.GetChainByCode(ctx, in.ChainCode)
+	if err != nil {
+		return fmt.Errorf("%w: %s chain data not found %s", key.ErrChainNotFound, in.ChainCode, err)
+	}
+
 	existing, err := s.repo.GetMasterKeyByChainCode(ctx, in.ChainCode)
 	if err != nil {
 		return fmt.Errorf("%w: failed to check master key: %s", key.ErrNetwork, err)
@@ -51,16 +56,15 @@ func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error 
 		return fmt.Errorf("%w: core keys already exist for chain %s", key.ErrGenesisExists, in.ChainCode)
 	}
 
-	result, err := s.kcClient.Genesis(ctx, in.TraceID, in.ChainCode, in.KeyType)
+	result, err := s.kcClient.Genesis(ctx, in.TraceID, in.ChainCode, chain.KeyType)
 	if err != nil {
 		return fmt.Errorf("%w: key creator genesis failed: %s", key.ErrNetwork, err)
 	}
 
 	masterKey := &model.MasterKey{
 		ChainCode:      in.ChainCode,
-		KeyType:        in.KeyType,
 		SeedCiphertext: result.SeedCiphertext,
-		DEK_Ciphertext: result.DekCiphertext,
+		DEK_Ciphertext: result.DEKCiphertext,
 		Context:        result.Context,
 		Bip44Path:      result.Bip44Path,
 		IsDeleted:      false,
@@ -72,6 +76,7 @@ func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error 
 			ChainCode:          in.ChainCode,
 			KeyUsage:           uint8(dk.KeyUsage),
 			Bip32KeyCiphertext: dk.Bip32KeyCiphertext,
+			DEK_Ciphertext:     dk.DEKCiphertext,
 			Context:            dk.Context,
 			Bip44Path:          dk.Bip44Path,
 			IsDeleted:          false,
@@ -87,15 +92,12 @@ func (s *keyService) Genesis(ctx context.Context, in *types.GenesisInput) error 
 
 func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([]*coordinator.AddressInfo, error) {
 	if err := validateTraceId(in.TraceID); err != nil {
-		log.Error("[CreateKey] invalid trace_id", "trace_id", in.TraceID, "error", err)
 		return nil, fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 	if err := validateChainCode(in.ChainCode); err != nil {
-		log.Error("[CreateKey] invalid chain_code", "chain_code", in.ChainCode, "error", err)
 		return nil, fmt.Errorf("%w: %s", key.ErrInvalidParam, err)
 	}
 	if in.Count < 1 || in.Count > 50 {
-		log.Error("[CreateKey] count out of range", "count", in.Count)
 		return nil, fmt.Errorf("%w: count must be 1-50", key.ErrInvalidParam)
 	}
 
@@ -103,41 +105,45 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 
 	maxIndex, err := s.repo.GetMaxAccountIndex(ctx, in.ChainCode, in.Usage.ToUin32())
 	if err != nil {
-		log.Error("[CreateKey] GetMaxAccountIndex failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
 		return nil, fmt.Errorf("%w: GetMaxAccountIndex failed: %s", key.ErrNetwork, err)
 	}
 	accountIndexStart := maxIndex + 1
 
 	coreKey, err := s.repo.GetCoreKeyByChainCodeAndUsage(ctx, in.ChainCode, in.Usage.ToUin32())
 	if err != nil {
-		log.Error("[CreateKey] GetCoreKeyByChainCodeAndUsage failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
 		return nil, fmt.Errorf("%w: GetCoreKeyByChainCodeAndUsage failed: %s", key.ErrNetwork, err)
 	}
 	if coreKey == nil {
-		log.Error("[CreateKey] core key not found", "trace_id", in.TraceID, "chain_code", in.ChainCode)
 		return nil, fmt.Errorf("%w: core key not found, run genesis first", key.ErrKeyNotFound)
 	}
 
-	masterKey, err := s.repo.GetMasterKeyByChainCode(ctx, in.ChainCode)
+	chain, err := s.repo.GetChainByCode(ctx, in.ChainCode)
 	if err != nil {
-		log.Error("[CreateKey] GetMasterKeyByChainCode failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
-		return nil, fmt.Errorf("%w: GetMasterKeyByChainCode failed: %s", key.ErrNetwork, err)
+		return nil, fmt.Errorf("%w: GetChainByCode failed: %s", key.ErrNetwork, err)
 	}
-	if masterKey == nil {
-		log.Error("[CreateKey] master key not found", "trace_id", in.TraceID, "chain_code", in.ChainCode)
-		return nil, fmt.Errorf("%w: master key not found, run genesis first", key.ErrKeyNotFound)
+	if chain == nil {
+		return nil, fmt.Errorf("%w: chain data not found, run genesis first", key.ErrKeyNotFound)
 	}
 
 	log.Debug("[CreateKey] calling key creator", "trace_id", in.TraceID, "account_index_start", accountIndexStart)
 
 	var createResult *keycreator.CreateKeyResult
+	params := keycreator.CreateKeyParams{
+		TraceID:            in.TraceID,
+		ChainCode:          in.ChainCode,
+		Bip44Path:          coreKey.Bip44Path,
+		AccountIndexStart:  accountIndexStart,
+		Count:              uint32(in.Count),
+		Bip32KeyCiphertext: coreKey.Bip32KeyCiphertext,
+		DEKCiphertext:      coreKey.DEK_Ciphertext,
+		AlgoType:           chain.KeyType,
+	}
 	if in.Usage == keyutil.KEY_USAGE_OPERATIONAL {
-		createResult, err = s.kcClient.CreateOperationalKey(ctx, in.TraceID, in.ChainCode, coreKey.Bip44Path, accountIndexStart, uint32(in.Count), coreKey.Bip32KeyCiphertext, masterKey.KeyType)
+		createResult, err = s.kcClient.CreateOperationalKey(ctx, params)
 	} else {
-		createResult, err = s.kcClient.CreateUserKey(ctx, in.TraceID, in.ChainCode, coreKey.Bip44Path, accountIndexStart, uint32(in.Count), coreKey.Bip32KeyCiphertext, masterKey.KeyType)
+		createResult, err = s.kcClient.CreateUserKey(ctx, params)
 	}
 	if err != nil {
-		log.Error("[CreateKey] key creator CreateKey failed", "trace_id", in.TraceID, "error", err)
 		return nil, fmt.Errorf("%w: key creator CreateKey failed: %s", key.ErrNetwork, err)
 	}
 
@@ -145,6 +151,9 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 
 	pkixList := make([]*tbproto.PublicKeysRequest, 0, len(createResult.Keys))
 	for _, key := range createResult.Keys {
+		if err := validateCallCreateResponse(key); err != nil {
+			return nil, err
+		}
 		pkixList = append(pkixList, &tbproto.PublicKeysRequest{
 			AccountIndex:  key.AccountIndex,
 			PkixPubkeyPem: key.PublicKey,
@@ -153,7 +162,6 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 
 	callRes, err := s.txClient.ConvertAddress(ctx, &tbproto.ConvertAddressRequest{TraceId: in.TraceID, Keys: pkixList}, in.ChainCode)
 	if err != nil {
-		log.Error("[CreateKey] ConvertAddress failed", "trace_id", in.TraceID, "error", err)
 		return nil, fmt.Errorf("%w: ConvertAddress failed: %s", key.ErrNetwork, err)
 	}
 
@@ -161,6 +169,9 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 
 	addrMap := make(map[uint32]string)
 	for _, addr := range callRes.Keys {
+		if addr.Address == "" {
+			return nil, fmt.Errorf("response filed:Address is empty")
+		}
 		addrMap[addr.AccountIndex] = addr.Address
 	}
 
@@ -170,14 +181,15 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 	for _, key := range createResult.Keys {
 		addr := addrMap[key.AccountIndex]
 		keys = append(keys, &model.ChindKey{
-			ChainCode:    in.ChainCode,
-			KeyUsage:     uint8(in.Usage.ToUin32()),
-			AccountIndex: key.AccountIndex,
-			BIP44Path:    key.Bip44Path,
-			KeyContext:   key.Context,
-			Ciphertext:   key.PrivKeyCiphertext,
-			PublicKey:    key.PublicKey,
-			KeyAddress:   addr,
+			ChainCode:      in.ChainCode,
+			KeyUsage:       uint8(in.Usage.ToUin32()),
+			AccountIndex:   key.AccountIndex,
+			BIP44Path:      key.Bip44Path,
+			KeyContext:     key.Context,
+			Ciphertext:     key.PrivKeyCiphertext,
+			DEK_Ciphertext: key.DEKCiphertext,
+			PublicKey:      key.PublicKey,
+			KeyAddress:     addr,
 		})
 		addressInfos = append(addressInfos, &coordinator.AddressInfo{
 			AccountIndex: key.AccountIndex,
@@ -188,13 +200,29 @@ func (s *keyService) CreateKey(ctx context.Context, in *types.CreateKeyInput) ([
 	log.Debug("[CreateKey] saving keys to db", "trace_id", in.TraceID, "key_count", len(keys))
 
 	if err := s.repo.CreateKeys(ctx, keys); err != nil {
-		log.Error("[CreateKey] failed to save keys", "trace_id", in.TraceID, "error", err)
 		return nil, fmt.Errorf("%w: failed to save keys: %s", key.ErrNetwork, err)
 	}
-
 	log.Info("[CreateKey] completed", "trace_id", in.TraceID, "address_count", len(addressInfos))
-
 	return addressInfos, nil
+}
+
+func validateCallCreateResponse(key keycreator.DerivedChildKeyResult) error {
+	if key.PrivKeyCiphertext == "" {
+		return fmt.Errorf("response filed:PrivKeyCiphertext is empty")
+	}
+	if key.Bip44Path == "" {
+		return fmt.Errorf("response filed:Bip44Path is empty")
+	}
+	if key.Context == "" {
+		return fmt.Errorf("response filed:Context is empty")
+	}
+	if key.DEKCiphertext == "" {
+		return fmt.Errorf("response filed:DEKCiphertext is empty")
+	}
+	if key.PublicKey == "" {
+		return fmt.Errorf("response filed:PublicKey is empty")
+	}
+	return nil
 }
 
 func (s *keyService) VerifyAddress(ctx context.Context, in *types.VerifyAddressInput) (bool, error) {

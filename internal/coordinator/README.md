@@ -84,11 +84,9 @@ internal/coordinator/
 
 ---
 
-
+> 注意：在调用以下接口测试时，请确认 KMS 服务器已部署成功。未部署请转到[HashiCorp Vault 部署与配置](../kms-vault/README.md)。
 
 ## 1. gRPC 接口
-
-
 
 ### 1.1 服务定义
 
@@ -129,8 +127,6 @@ service Coordinator {
 
 ### 1.2 接口说明
 
-
-
 #### 1.2.1 健康检查
 
 **功能**: 检查服务运行状态
@@ -149,8 +145,6 @@ message HealthCheckResponse { string status = 1; }
 ```
 
 ---
-
-
 
 #### 1.2.2 Genesis 初始化
 

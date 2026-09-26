@@ -406,7 +406,8 @@ type CreateKeyRequest struct {
 	AccountIndexStart  uint32                 `protobuf:"varint,4,opt,name=account_index_start,json=accountIndexStart,proto3" json:"account_index_start,omitempty"` // 账户索引的开始位置，包含当前值；例如：3 表示从 account_index=3 开始派生
 	Count              uint32                 `protobuf:"varint,5,opt,name=count,proto3" json:"count,omitempty"`                                                    // 派生密钥的数量；例如：{account_index_start}=3,{count}=5 表示派生这5个密钥 account_index=3,4,5,6,7
 	Bip32KeyCiphertext string                 `protobuf:"bytes,6,opt,name=bip32key_ciphertext,json=bip32keyCiphertext,proto3" json:"bip32key_ciphertext,omitempty"` // 主密钥PEM密文（base64），Genesis返回的seed，必填
-	KeyType            string                 `protobuf:"bytes,7,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`                                  // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
+	DekCiphertext      string                 `protobuf:"bytes,7,opt,name=dek_ciphertext,json=dekCiphertext,proto3" json:"dek_ciphertext,omitempty"`                //  DEK 数据加密密钥，用于信封加密解密
+	KeyType            string                 `protobuf:"bytes,8,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`                                  // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -479,6 +480,13 @@ func (x *CreateKeyRequest) GetCount() uint32 {
 func (x *CreateKeyRequest) GetBip32KeyCiphertext() string {
 	if x != nil {
 		return x.Bip32KeyCiphertext
+	}
+	return ""
+}
+
+func (x *CreateKeyRequest) GetDekCiphertext() string {
+	if x != nil {
+		return x.DekCiphertext
 	}
 	return ""
 }
@@ -570,7 +578,7 @@ const file_proto_keycreator_proto_rawDesc = "" +
 	"\n" +
 	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12%\n" +
 	"\x0edek_ciphertext\x18\x04 \x01(\tR\rdekCiphertext\x12=\n" +
-	"\fderived_keys\x18\x05 \x03(\v2\x1a.keycreator.DerivedCoreKeyR\vderivedKeys\"\xfd\x01\n" +
+	"\fderived_keys\x18\x05 \x03(\v2\x1a.keycreator.DerivedCoreKeyR\vderivedKeys\"\xa4\x02\n" +
 	"\x10CreateKeyRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
@@ -579,8 +587,9 @@ const file_proto_keycreator_proto_rawDesc = "" +
 	"bip44_path\x18\x03 \x01(\tR\tbip44Path\x12.\n" +
 	"\x13account_index_start\x18\x04 \x01(\rR\x11accountIndexStart\x12\x14\n" +
 	"\x05count\x18\x05 \x01(\rR\x05count\x12/\n" +
-	"\x13bip32key_ciphertext\x18\x06 \x01(\tR\x12bip32keyCiphertext\x12\x19\n" +
-	"\bkey_type\x18\a \x01(\tR\akeyType\"D\n" +
+	"\x13bip32key_ciphertext\x18\x06 \x01(\tR\x12bip32keyCiphertext\x12%\n" +
+	"\x0edek_ciphertext\x18\a \x01(\tR\rdekCiphertext\x12\x19\n" +
+	"\bkey_type\x18\b \x01(\tR\akeyType\"D\n" +
 	"\x11CreateKeyResponse\x12/\n" +
 	"\x04keys\x18\x01 \x03(\v2\x1b.keycreator.DerivedChildKeyR\x04keys2\xc3\x02\n" +
 	"\n" +

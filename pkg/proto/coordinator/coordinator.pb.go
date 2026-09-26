@@ -105,7 +105,6 @@ type GenesisRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`       // 链路跟踪 ID，1-36 必填
 	ChainCode     string                 `protobuf:"bytes,2,opt,name=chain_code,json=chainCode,proto3" json:"chain_code,omitempty"` // 区块链代码，1-36 必填
-	KeyType       string                 `protobuf:"bytes,3,opt,name=key_type,json=keyType,proto3" json:"key_type,omitempty"`       // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,13 +149,6 @@ func (x *GenesisRequest) GetTraceId() string {
 func (x *GenesisRequest) GetChainCode() string {
 	if x != nil {
 		return x.ChainCode
-	}
-	return ""
-}
-
-func (x *GenesisRequest) GetKeyType() string {
-	if x != nil {
-		return x.KeyType
 	}
 	return ""
 }
@@ -856,12 +848,11 @@ const file_proto_coordinator_proto_rawDesc = "" +
 	"\x17proto/coordinator.proto\x12\vcoordinator\"\x14\n" +
 	"\x12HealthCheckRequest\"-\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"e\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"J\n" +
 	"\x0eGenesisRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
-	"chain_code\x18\x02 \x01(\tR\tchainCode\x12\x19\n" +
-	"\bkey_type\x18\x03 \x01(\tR\akeyType\"+\n" +
+	"chain_code\x18\x02 \x01(\tR\tchainCode\"+\n" +
 	"\x0fGenesisResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"b\n" +
 	"\x10CreateKeyRequest\x12\x19\n" +

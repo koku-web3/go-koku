@@ -233,25 +233,29 @@ func isKeyExistsError(err error) bool {
 	return strings.Contains(errStr, "already exists") || strings.Contains(errStr, "400")
 }
 
-// GenerateDataKey 调用 Vault Transit datakey/plaintext/{keyName} 批量生成 DEK
+// GenerateDataKey 调用 Vault Transit datakey/plaintext/{keyName} 生成 DEK
 // transitName: transit引擎名称 (core/operations/user)
 // keyName: 密钥名称 (如 ethereum-masterkey)
 // context: 密钥派生上下文
-// count: 批量生成数量（建议单次不超过100）
 // 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀)
-func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32) (datakeys []DataKey, err error) {
+func (k *KMS) GenerateDataKey(transitName, keyName, context string) (*DataKey, error) {
+	if strings.TrimSpace(transitName) == "" {
+		return nil, fmt.Errorf("transitName cannot be empty")
+	}
+	if strings.TrimSpace(keyName) == "" {
+		return nil, fmt.Errorf("keyName cannot be empty")
+	}
+	if strings.TrimSpace(context) == "" {
+		return nil, fmt.Errorf("context cannot be empty")
+	}
+
 	datakeyPath := fmt.Sprintf("transit/%s/datakey/plaintext/%s", transitName, keyName)
 
 	payload := map[string]interface{}{
-		"plaintext": base64.StdEncoding.EncodeToString([]byte("generated-datakey")),
-		"count":     count,
+		"context": base64.StdEncoding.EncodeToString([]byte(context)),
 	}
 
-	if context != "" {
-		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
-	}
-
-	log.Debug("Generate data key from Vault", "path", datakeyPath, "count", count, "context_length", len(context))
+	log.Debug("Generate data key from Vault", "path", datakeyPath, "context_length", len(context))
 	secret, err := k.vault.GetClient().Logical().Write(datakeyPath, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate data key: %w", err)
@@ -271,7 +275,7 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32
 		return nil, fmt.Errorf("invalid ciphertext format in data key response")
 	}
 
-	return []DataKey{{Plaintext: plaintext, Ciphertext: ciphertext}}, nil
+	return &DataKey{Plaintext: plaintext, Ciphertext: ciphertext}, nil
 }
 
 // DecryptDataKey 使用 Vault Transit 解密 DEK ciphertext

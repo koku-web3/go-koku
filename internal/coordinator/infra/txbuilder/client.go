@@ -14,7 +14,7 @@ import (
 // ChainProvider 接口的设计作用于解耦客户端（Client）与链配置信息（如 RPC/gRPC 地址）的获取细节。
 // 让 Client 只关心如何根据链代码获取链服务地址，无需关心背后实现原理。
 type ChainProvider interface {
-	GetChainByCode(chainCode string) (addr string, ok bool)
+	GetChainByCode(chainCode string) (string, error)
 }
 
 type Client struct {
@@ -187,11 +187,11 @@ func (c *Client) getOrCreate(chainCode string) (*ChainClient, error) {
 	if ok {
 		return cc, nil
 	}
-	addr, ok := c.chainsPA.GetChainByCode(chainCode)
-	if !ok || addr == "" {
-		return nil, fmt.Errorf("%w: %s", ErrNoAddress, chainCode)
+	addr, err := c.chainsPA.GetChainByCode(chainCode)
+	if err != nil {
+		return nil, fmt.Errorf("get chain(code=%s) from DB failed: %w", chainCode, err)
 	}
-	cc, err := newChainClient(chainCode, addr, c.cfg)
+	cc, err = newChainClient(chainCode, addr, c.cfg)
 	if err != nil {
 		return nil, err
 	}

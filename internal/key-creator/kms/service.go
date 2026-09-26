@@ -58,14 +58,14 @@ func NewKMS(ctx context.Context, vaultCfg *config.VaultConfig, awsCfg *config.AW
 	}, nil
 }
 
-// CreateMasterKey 在 Vault Transit Engine 中创建主密钥
-// chain: 链名称（如 eth, btc），用于构建密钥路径
+// CreateKey 在 Vault Transit Engine 中创建密钥
+// transitName: transit引擎名称 ./pkg/vault/transit/util.go
 // name: 密钥名称
 // keyType: 密钥类型（如 aes256-gcm96, ed25519）
 // derived: 是否使用派生密钥（启用后相同输入会生成不同密钥）
-func (k *KMS) CreateMasterKey(chain, name string, keyType string, derived bool) error {
-	// Transit Engine 密钥路径格式: transit/{chain}/keys/{key_name}
-	keyPath := fmt.Sprintf("transit/%s/keys/%s", chain, name)
+func (k *KMS) CreateKey(transitName, name string, keyType string, derived bool) error {
+	// Transit Engine 密钥路径格式: transit/{transitName}/keys/{key_name}
+	keyPath := fmt.Sprintf("transit/%s/keys/%s", transitName, name)
 
 	// 构造创建密钥的请求 payload
 	payload := map[string]interface{}{
@@ -76,40 +76,35 @@ func (k *KMS) CreateMasterKey(chain, name string, keyType string, derived bool) 
 	// 调用 Vault API 创建密钥
 	secret, err := k.vault.GetClient().Logical().Write(keyPath, payload)
 	if err != nil {
-		// 检查是否是"密钥已存在"错误，如果是则忽略（幂等性处理）
-		if isKeyExistsError(err) {
-			log.Info("Master key already exists", "chain", chain)
-			return nil
-		}
-		return fmt.Errorf("failed to create master key for chain %s: %w", chain, err)
+		return fmt.Errorf("failed to create master key for chain %s: %w", transitName, err)
 	}
 
 	// 记录创建结果
 	if secret != nil {
-		log.Info("Successfully created master key", "chain", chain, "key_name", fmt.Sprintf("%s-master-key", chain))
+		log.Info("Successfully created master key", "transit_name", transitName, "key_name", name)
 	} else {
-		log.Info("Master key already exists (nil response)", "chain", chain)
+		log.Info("Master key already exists (nil response)", "chain", transitName)
 	}
 
 	return nil
 }
 
 // ListKeys 列出指定链的所有密钥
-// chain: 链名称
+// transitName: transit引擎名称 ./pkg/vault/transit/util.go
 // 返回: 包含密钥列表的 Secret 对象
-func (k *KMS) ListKeys(chain string) (*api.Secret, error) {
-	// Transit Engine 密钥列表路径: transit/{chain}/keys (使用 LIST 方法)
-	keyPath := fmt.Sprintf("transit/%s/keys", chain)
+func (k *KMS) ListKeys(transitName string) (*api.Secret, error) {
+	// Transit Engine 密钥列表路径: transit/{transitName}/keys (使用 LIST 方法)
+	keyPath := fmt.Sprintf("transit/%s/keys", transitName)
 	return k.vault.GetClient().Logical().List(keyPath)
 }
 
 // ReadKey 读取指定密钥的详细信息
-// chain: 链名称
+// transitName: transit引擎名称 ./pkg/vault/transit/util.go
 // keyName: 密钥名称
 // 返回: 包含密钥信息的 Secret 对象
-func (k *KMS) ReadKey(chain, keyName string) (*api.Secret, error) {
-	// Transit Engine 密钥读取路径: transit/{chain}/keys/{key_name}
-	keyPath := fmt.Sprintf("transit/%s/keys/%s", chain, keyName)
+func (k *KMS) ReadKey(transitName, keyName string) (*api.Secret, error) {
+	// Transit Engine 密钥读取路径: transit/{transitName}/keys/{key_name}
+	keyPath := fmt.Sprintf("transit/%s/keys/%s", transitName, keyName)
 	return k.vault.GetClient().Logical().Read(keyPath)
 }
 
@@ -135,7 +130,7 @@ func (k *KMS) ReadKey(chain, keyName string) (*api.Secret, error) {
 // {encrypt} 表示加密操作
 // {ethereum-masterkey} 表示 密钥名称，对应 `name`
 func (k *KMS) Decrypt(transitName, keyName string, ciphertext string, context string) (string, error) {
-	// Transit Engine 解密路径格式: transit/{chain}/decrypt/{key_name}
+	// Transit Engine 解密路径格式: transit/{transitName}/decrypt/{key_name}
 	decryptPath := fmt.Sprintf("transit/%s/decrypt/%s", transitName, keyName)
 
 	// Vault Transit Engine 要求 ciphertext 和 context 使用 base64 格式
@@ -225,23 +220,12 @@ func (k *KMS) Encrypt(transitName, keyName string, plaintext []byte, context str
 	return ciphertext, nil
 }
 
-// isKeyExistsError 判断 Vault 返回的错误是否是"密钥已存在"错误
-// 用于实现幂等性：密钥已存在时不需要报错
-func isKeyExistsError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "already exists") || strings.Contains(errStr, "400")
-}
-
-// GenerateDataKey 调用 Vault Transit datakey/plaintext/{keyName} 批量生成 DEK
+// GenerateDataKey 调用 Vault Transit datakey/plaintext/{keyName} 生成 DEK
 // transitName: transit引擎名称 (core/operations/user)
 // keyName: 密钥名称 (如 ethereum-masterkey)
 // context: 密钥派生上下文
-// count: 批量生成数量（建议单次不超过100）
 // 返回: plaintext (base64 DEK明文), ciphertext (DEK密文, 带vault:v1:前缀)
-func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32) (datakeys []DataKey, err error) {
+func (k *KMS) GenerateDataKey(transitName, keyName, context string) (*DataKey, error) {
 	if strings.TrimSpace(transitName) == "" {
 		return nil, fmt.Errorf("transitName cannot be empty")
 	}
@@ -251,16 +235,14 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32
 	if strings.TrimSpace(context) == "" {
 		return nil, fmt.Errorf("context cannot be empty")
 	}
-	// 统一使用 batch endpoint: /transit/datakeys/plaintext/:name
-	// 即使 count=1 也使用 batch endpoint，返回 key_pairs 数组
-	datakeyPath := fmt.Sprintf("transit/%s/datakeys/plaintext/%s", transitName, keyName)
+
+	datakeyPath := fmt.Sprintf("transit/%s/datakey/plaintext/%s", transitName, keyName)
 
 	payload := map[string]interface{}{
-		"plaintext": base64.StdEncoding.EncodeToString([]byte("generated-datakey")),
-		"count":     count,
+		"context": base64.StdEncoding.EncodeToString([]byte(context)),
 	}
 
-	log.Debug("Generate data key from Vault", "path", datakeyPath, "count", count, "context_length", len(context))
+	log.Debug("Generate data key from Vault", "path", datakeyPath, "context_length", len(context))
 	secret, err := k.vault.GetClient().Logical().Write(datakeyPath, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate data key: %w", err)
@@ -270,35 +252,17 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string, count uint32
 		return nil, fmt.Errorf("Vault response is empty")
 	}
 
-	keyPairsRaw, ok := secret.Data["key_pairs"]
+	plaintext, ok := secret.Data["plaintext"].(string)
 	if !ok {
-		return nil, fmt.Errorf("missing key_pairs in data key response")
+		return nil, fmt.Errorf("invalid plaintext format in data key response")
 	}
 
-	keyPairs, ok := keyPairsRaw.([]interface{})
+	ciphertext, ok := secret.Data["ciphertext"].(string)
 	if !ok {
-		return nil, fmt.Errorf("invalid key_pairs format in data key response")
+		return nil, fmt.Errorf("invalid ciphertext format in data key response")
 	}
 
-	datakeys = make([]DataKey, 0, len(keyPairs))
-	for _, kp := range keyPairs {
-		kpMap, ok := kp.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("invalid key_pair format in data key response")
-		}
-
-		plaintext, ok := kpMap["plaintext"].(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid plaintext format in key_pair")
-		}
-		ciphertext, ok := kpMap["ciphertext"].(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid ciphertext format in key_pair")
-		}
-		datakeys = append(datakeys, DataKey{Plaintext: plaintext, Ciphertext: ciphertext})
-	}
-
-	return datakeys, nil
+	return &DataKey{Plaintext: plaintext, Ciphertext: ciphertext}, nil
 }
 
 // DecryptDataKey 使用 Vault Transit 解密 DEK ciphertext

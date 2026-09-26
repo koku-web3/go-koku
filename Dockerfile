@@ -21,10 +21,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /out/coor
 # =============================================================================
 # Stage 2: Runtime image
 # =============================================================================
-FROM --platform=linux/amd64 gcr.io/distroless/static-debian12:nonroot AS runtime
+FROM alpine:3.20 AS runtime
 
 # Create non-root user and app directory
-RUN mkdir -p /app && useradd -u 10001 -U appuser && chown -R appuser:appuser /app
+RUN addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup && \
+    mkdir -p /app && chown -R appuser:appgroup /app
 USER appuser
 
 WORKDIR /app

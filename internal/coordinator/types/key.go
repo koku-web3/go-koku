@@ -5,7 +5,6 @@ import "github.com/koku-web3/go-koku/pkg/keyutil"
 type GenesisInput struct {
 	TraceID   string
 	ChainCode string
-	KeyType   string
 }
 
 type CreateKeyInput struct {

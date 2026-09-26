@@ -72,12 +72,11 @@ func (s *Server) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest)
 }
 
 func (s *Server) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
-	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode, "key_type", req.KeyType)
+	log.Info("Genesis", "trace_id", req.TraceId, "chain_code", req.ChainCode)
 
 	err := s.keySvc.Genesis(ctx, &types.GenesisInput{
 		TraceID:   req.TraceId,
 		ChainCode: req.ChainCode,
-		KeyType:   req.KeyType,
 	})
 
 	log.Debug("Genesis completed", "success", err == nil)
