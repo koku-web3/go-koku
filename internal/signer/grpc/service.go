@@ -11,6 +11,7 @@ import (
 
 	"github.com/koku-web3/go-koku/internal/signer/kms"
 	aead "github.com/koku-web3/go-koku/pkg/crypto"
+	"github.com/koku-web3/go-koku/pkg/errors"
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	proto "github.com/koku-web3/go-koku/pkg/proto/signer"
 	"github.com/koku-web3/go-koku/pkg/securestore"
@@ -45,7 +46,7 @@ func NewSignerService(kms *kms.KMS, host string, port int, tlsCfg *tls.Config) *
 	}
 }
 
-func (s *SignerService) Start(ctx context.Context) error {
+func (s *SignerService) Start(ctx context.Context, opt grpc.ServerOption) error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -54,10 +55,10 @@ func (s *SignerService) Start(ctx context.Context) error {
 
 	if s.tlsCfg != nil {
 		creds := credentials.NewTLS(s.tlsCfg)
-		s.grpcSrv = grpc.NewServer(grpc.Creds(creds))
+		s.grpcSrv = grpc.NewServer(grpc.Creds(creds), opt)
 		log.Info("Starting gRPC server with mTLS", "address", addr)
 	} else {
-		s.grpcSrv = grpc.NewServer()
+		s.grpcSrv = grpc.NewServer(opt)
 		log.Warn("Starting gRPC server without TLS (insecure)", "address", addr)
 	}
 	proto.RegisterSignerServer(s.grpcSrv, s)
@@ -89,28 +90,26 @@ func (s *SignerService) SignAcct1(ctx context.Context, req *proto.SignRequest) (
 type transitKeyNameFunc func(string) string
 
 func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, getKeyName transitKeyNameFunc, methodName string) (*proto.SignResponse, error) {
-	log.Info(methodName+" called",
-		"trace_id", req.TraceId,
-		"chain_code", req.ChainCode,
-		"key_type", req.KeyType,
-		"bip44_path", req.Bip44Path,
-		"message", req.Message,
-		"DekCiphertext_len", len(req.DekCiphertext),
-		"priv_key_ciphertext_len", len(req.PrivKeyCiphertext),
-	)
+	log.Debug("Sign received", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "key_type", req.KeyType, "message_length", len(req.Message), "privkey_ciphertext_length", len(req.PrivKeyCiphertext), "dek_ciphertext_length", len(req.DekCiphertext))
 
-	// 入参校验
 	if err := validateSignRequest(req); err != nil {
-		log.Error("Sign validation failed", "trace_id", req.TraceId, "error", err)
-		return nil, fmt.Errorf("invalid request: %w", err)
+		log.Warn("Invalid input parameter", "trace_id", req.TraceId, "field", "sign_request", "error", err)
+		return nil, errors.InvalidArgument("sign_request")
 	}
 
-	res, err := s.sign(transitName, getKeyName(req.ChainCode), req.Bip44Path, req.KeyType, req.Message, req.PrivKeyCiphertext, req.DekCiphertext)
+	msgBytes, err := hex.DecodeString(req.Message)
 	if err != nil {
-		return nil, fmt.Errorf("trace_id=%s, sign failed: %w", req.TraceId, err)
+		log.Warn("Invalid input parameter", "trace_id", req.TraceId, "field", "message", "error", err)
+		return nil, errors.InvalidArgument("message")
 	}
-	log.Info(methodName+" succeeded", "trace_id", req.TraceId, "bip44_path", req.Bip44Path)
 
+	res, err := s.sign(req.TraceId, transitName, getKeyName(req.ChainCode), req.Bip44Path, req.KeyType, msgBytes, req.PrivKeyCiphertext, req.DekCiphertext)
+	if err != nil {
+		log.Error("Sign failed", "trace_id", req.TraceId, "error", err)
+		return nil, errors.Internal()
+	}
+
+	log.Info("Sign succeeded!", "trace_id", req.TraceId, "chain_code", req.ChainCode, "signature_length", len(res.Signature))
 	return res, nil
 }
 
@@ -125,22 +124,15 @@ func (s *SignerService) signMessage(req *proto.SignRequest, transitName string, 
 // - 私钥明文仅在签名操作期间存在于内存
 // - 签名完成后立即清零
 // - 所有签名操作都会记录到审计日志
-func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string) (*proto.SignResponse, error) {
-	msgBytes, err := hex.DecodeString(message)
-	if err != nil {
-		return nil, fmt.Errorf("decode hex message from string to bytes failed: %s", err.Error())
-	}
-
-	// 获取算法实现
+func (s *SignerService) sign(traceId, transitName, keyName, bip44Path, keyType string, msgBytes []byte, privKeyCiphertext, dekCiphertext string) (*proto.SignResponse, error) {
 	algo, err := algorithm.Get(keyType)
 	if err != nil {
-		return nil, fmt.Errorf("unsupported key type for signing: %s", keyType)
+		return nil, fmt.Errorf("unsupported signature algorithm: %s", keyType)
 	}
 
 	context := transit.Bip44PathToContext(bip44Path)
 
-	// 解密 DEK
-	dekPlaintext, err := s.kmsServ.DecryptDataKey(transitName, keyName, dekCiphertext, context)
+	dekPlaintext, err := s.kmsServ.DecryptDataKey(traceId, transitName, keyName, dekCiphertext, context)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +143,6 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 	}
 	defer securestore.Memzero(dekBytes)
 
-	// 解密私钥信封: base64(nonce || encrypted)
 	envelopeBytes, err := base64.StdEncoding.DecodeString(privKeyCiphertext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt private key: %w", err)
@@ -166,16 +157,14 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 
 	privateDER, err := aead.Decrypt(encrypted, nonce, dekBytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode base64 string:%w", err)
+		return nil, fmt.Errorf("failed to decode base64 string: %w", err)
 	}
-	// 清零私钥DER数据
 	defer securestore.Memzero(privateDER)
 
 	privateKey, err := algo.ParsePrivateKey(privateDER)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parese private key from DER:%w", err)
+		return nil, fmt.Errorf("failed to parse private key from DER: %w", err)
 	}
-	// 清零私钥
 	defer algo.ClearPrivateKey(privateKey)
 
 	signature, err := algo.Sign(privateKey, msgBytes)
@@ -183,7 +172,6 @@ func (s *SignerService) sign(transitName, keyName, bip44Path, keyType, message, 
 		return nil, fmt.Errorf("failed to sign message: %w", err)
 	}
 
-	log.Info("Sign message success")
 	return &proto.SignResponse{
 		Signature: hex.EncodeToString(signature),
 	}, nil
@@ -205,7 +193,7 @@ func validateSignRequest(req *proto.SignRequest) error {
 	if req.KeyType == "" || len(req.KeyType) > 32 {
 		errors = append(errors, "key_type must be 1-32 characters")
 	}
-	if req.Message == "" || len(req.Message) > 1024 { // 放宽限制到 1MB
+	if req.Message == "" || len(req.Message) > 1024 {
 		errors = append(errors, "message must be 1024 characters")
 	}
 	if req.PrivKeyCiphertext == "" {
@@ -213,11 +201,6 @@ func validateSignRequest(req *proto.SignRequest) error {
 	}
 	if req.DekCiphertext == "" {
 		errors = append(errors, "dek_ciphertext is required")
-	}
-
-	// 验证 keyType 是否支持
-	if !algorithm.IsSupported(req.KeyType) {
-		errors = append(errors, fmt.Sprintf("unsupported key_type: %s", req.KeyType))
 	}
 
 	if len(errors) > 0 {

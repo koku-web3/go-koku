@@ -86,7 +86,7 @@ func (k *KMS) CreateMasterKey(chain, name string, keyType string, derived bool) 
 
 	// 记录创建结果
 	if secret != nil {
-		log.Info("Successfully created master key", "chain", chain, "key_name", fmt.Sprintf("%s-master-key", chain))
+		log.Info("Master key created", "chain", chain, "key_name", chain+"-master-key")
 	} else {
 		log.Info("Master key already exists (nil response)", "chain", chain)
 	}
@@ -203,7 +203,7 @@ func (k *KMS) Encrypt(transitName, keyName string, plaintext []byte, context str
 		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
 	}
 
-	log.Info("Call Vault Service", "path", encryptPath, "plaintext_length", len(plaintext), "context_length", len(context))
+	log.Debug("Call Vault encrypt", "transit_path", encryptPath, "plaintext_length", len(plaintext), "context_length", len(context))
 	// 调用 Vault API 执行加密
 	secret, err := k.vault.GetClient().Logical().Write(encryptPath, payload)
 	if err != nil {
@@ -284,7 +284,7 @@ func (k *KMS) GenerateDataKey(transitName, keyName, context string) (*DataKey, e
 // ciphertext: GenerateDataKey返回的ciphertext
 // context: 密钥派生上下文
 // 返回: plaintext (base64 DEK明文)
-func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (string, error) {
+func (k *KMS) DecryptDataKey(traceId, transitName, keyName, ciphertext, context string) (string, error) {
 	decryptPath := fmt.Sprintf("transit/%s/decrypt/%s", transitName, keyName)
 
 	payload := map[string]interface{}{
@@ -294,22 +294,27 @@ func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (
 	if context != "" {
 		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
 	}
-
-	log.Debug("Decrypt data key via Vault", "path", decryptPath, "context_length", len(context))
+	start := time.Now()
+	log.Debug("Call KMS decrypt datakey", "trace_id", traceId, "transit_path", decryptPath, "context_length", len(context), "ciphertext_length", len(ciphertext))
 	secret, err := k.vault.GetClient().Logical().Write(decryptPath, payload)
+	cost := time.Since(start)
+
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt data key: %w", err)
+		log.Warn("Call KMS decrypt datakey failed", "trace_id", traceId, "transit_path", decryptPath, "error", err)
+		return "", err
 	}
 
 	if secret == nil || secret.Data == nil {
-		return "", fmt.Errorf("Vault response is empty")
+		log.Warn("Call KMS decrypt datakey response data is empty", "trace_id", traceId, "transit_path", decryptPath)
+		return "", fmt.Errorf("KMS response is empty")
 	}
 
 	plaintext, ok := secret.Data["plaintext"].(string)
 	if !ok {
+		log.Warn("Call KMS decrypt datakey response field plaintext invalid", "trace_id", traceId, "transit_path", decryptPath)
 		return "", fmt.Errorf("invalid plaintext format in data key decryption response")
 	}
-
+	log.Debug("Call KMS decrypt datakey succeeded", "trace_id", traceId, "transit_path", decryptPath, "time_cost_ms", cost.Milliseconds())
 	return plaintext, nil
 }
 

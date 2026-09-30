@@ -19,10 +19,15 @@ func (w *responseWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+var allowedHeaders = map[string]bool{
+	"Content-Type":     true,
+	"User-Agent":       true,
+	"X-Request-Id":     true,
+	"X-Correlation-Id": true,
+}
+
 func HTTPLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger := log.Root()
-
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
@@ -38,66 +43,57 @@ func HTTPLogger() gin.HandlerFunc {
 			body:           bytes.NewBuffer(nil),
 		}
 		c.Writer = rw
-
 		c.Next()
 
 		latency := time.Since(start)
-		status := c.Writer.Status()
 
-		headers := make(map[string]interface{})
+		headers := make(map[string]string)
 		for k, v := range c.Request.Header {
-			if k == "Authorization" || k == "X-Vault-Token" || k == "Cookie" {
-				headers[k] = "[REDACTED]"
-			} else {
+			if allowedHeaders[k] {
 				headers[k] = v[0]
-			}
-		}
-
-		var respBody string
-		if rw.body.Len() > 0 {
-			body := rw.body.Bytes()
-			if len(body) > 1024 {
-				respBody = string(body[:1024]) + "... [truncated]"
 			} else {
-				respBody = string(body)
+				headers[k] = "[REDACTED]"
 			}
 		}
 
-		if status >= 500 {
-			logger.Error("HTTP request completed with server error",
-				"status", status,
+		requestBodyLen := len(requestBody)
+		responseBodyLen := rw.body.Len()
+
+		if c.Writer.Status() >= 500 {
+			log.Error("HTTP request completed",
+				"status", c.Writer.Status(),
 				"method", c.Request.Method,
 				"path", path,
 				"query", query,
 				"ip", c.ClientIP(),
-				"latency", latency.String(),
+				"time_cost_ms", latency.Milliseconds(),
 				"headers", headers,
-				"request_body", string(requestBody),
-				"response_body", respBody,
+				"request_body_length", requestBodyLen,
+				"response_body_length", responseBodyLen,
 			)
-		} else if status >= 400 {
-			logger.Warn("HTTP request completed with client error",
-				"status", status,
+		} else if c.Writer.Status() >= 400 {
+			log.Warn("HTTP request completed",
+				"status", c.Writer.Status(),
 				"method", c.Request.Method,
 				"path", path,
 				"query", query,
 				"ip", c.ClientIP(),
-				"latency", latency.String(),
+				"time_cost_ms", latency.Milliseconds(),
 				"headers", headers,
-				"request_body", string(requestBody),
-				"response_body", respBody,
+				"request_body_length", requestBodyLen,
+				"response_body_length", responseBodyLen,
 			)
 		} else {
-			logger.Info("HTTP request completed",
-				"status", status,
+			log.Info("HTTP request completed",
+				"status", c.Writer.Status(),
 				"method", c.Request.Method,
 				"path", path,
 				"query", query,
 				"ip", c.ClientIP(),
-				"latency", latency.String(),
+				"time_cost_ms", latency.Milliseconds(),
 				"headers", headers,
-				"request_body", string(requestBody),
-				"response_body", respBody,
+				"request_body_length", requestBodyLen,
+				"response_body_length", responseBodyLen,
 			)
 		}
 	}

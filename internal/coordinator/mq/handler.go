@@ -42,10 +42,7 @@ func ParseMsg(body []byte) (*UniversalTransferMsg, error) {
 // RoutingKeyFor is defined in router.go
 
 func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalTransferMsg) error {
-	log.Info("MQ UniversalTransfer received",
-		"trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode,
-		"from_address", msg.FromAddress, "to_address", msg.ToAddress,
-		"amount", msg.Amount, "routing_key", routingKey)
+	log.Info("UniversalTransfer received", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "from_address", msg.FromAddress, "to_address", msg.ToAddress, "amount", msg.Amount, "routing_key", routingKey)
 
 	keyUsage, err := RoutingKeyFor(routingKey)
 	if err != nil {
@@ -64,14 +61,11 @@ func (h *Handler) Handle(ctx context.Context, routingKey string, msg *UniversalT
 		KeyUsage:    keyUsage,
 	})
 
-	if err == nil {
-		log.Info("UniversalTransferCallback", "success", true, "biz_id", msg.BizID, "trace_id", msg.TraceID, "tx_hash", result.TxHash)
-		return nil
-	} else {
-		log.Info("UniversalTransferCallback", "biz_id", msg.BizID, "trace_id", msg.TraceID, "error", err.Error())
+	if err != nil {
+		log.Warn("UniversalTransfer failed", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "from_address", msg.FromAddress, "error", err)
+		return NewTransientErrorFromError(err)
 	}
 
-	// 返回错误类型 Transient，调用方会丢失该消息，不会再重复调用
-	// TODO 网络错误需要重试
-	return NewTransientErrorFromError(err)
+	log.Info("UniversalTransfer succeeded", "trace_id", msg.TraceID, "biz_id", msg.BizID, "tx_hash", result.TxHash)
+	return nil
 }

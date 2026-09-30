@@ -70,77 +70,101 @@ func NewClient(cfg Config, chainsP ChainProvider) (*Client, error) {
 }
 
 func (c *Client) VerifyAddress(ctx context.Context, req *tbgrpc.VerifyAddressRequest, chainCode string) (*tbgrpc.VerifyAddressResponse, error) {
-	log.Debug("Calling verify address", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
 	client, err := c.getClient(chainCode)
 	if err != nil {
-		return nil, err
-	}
-	return client.VerifyAddress(ctx, req)
-}
-
-func (c *Client) VerifyContractAddress(ctx context.Context, req *tbgrpc.VerifyContractAddressRequest, chainCode string) (*tbgrpc.VerifyContractAddressResponse, error) {
-	log.Debug("Calling verify contract address", "trace_id", req.TraceId, "chain_code", chainCode, "address", req.Address)
-	client, err := c.getClient(chainCode)
-	if err != nil {
-		return nil, err
-	}
-	return client.VerifyContractAddress(ctx, req)
-}
-
-func (c *Client) ConvertAddress(ctx context.Context, req *tbgrpc.ConvertAddressRequest, chainCode string) (*tbgrpc.ConvertAddressResponse, error) {
-	log.Debug("Calling convert address", "trace_id", req.TraceId, "chain_code", chainCode)
-	if len(req.Keys) == 0 {
-		return nil, fmt.Errorf("keys is empty")
-	}
-	client, err := c.getClient(chainCode)
-	if err != nil {
-		return nil, err
-	}
-	return client.ConvertAddress(ctx, req)
-}
-
-func (c *Client) CheckSufficientBalance(ctx context.Context, req *tbgrpc.CheckSufficientBalanceRequest) (*tbgrpc.CheckSufficientBalanceResponse, error) {
-	log.Debug("Calling check sufficient balance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "from_address", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
-	client, err := c.getClient(req.ChainCode)
-	if err != nil {
-		log.Error("Failed to get chain client", "chain_code", req.ChainCode, "error", err.Error())
-		return nil, err
-	}
-	return client.CheckSufficientBalance(ctx, req)
-}
-
-func (c *Client) BuildSignRawData(ctx context.Context, req *tbgrpc.BuildSignRawDataRequest) (*tbgrpc.BuildSignRawDataResponse, error) {
-	log.Debug("Calling build sign raw data", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "coin_symbol", req.CoinSymbol, "from_address", req.FromAddress, "to_address", req.ToAddress, "amount", req.Amount, "contract", req.Contract)
-	client, err := c.getClient(req.ChainCode)
-	if err != nil {
-		log.Error("Failed to get chain client", "chain_code", req.ChainCode, "error", err.Error())
 		return nil, err
 	}
 	start := time.Now()
-	res, err := client.BuildSignRawData(ctx, req)
+	log.Debug("Calling txbuilder VerifyAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address_length", len(req.Address))
+	resp, err := client.VerifyAddress(ctx, req)
 	cost := time.Since(start)
 	if err != nil {
-		log.Error("Call TxBuilderClient.BuildSignRawData failed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "time_cost_us", cost.Microseconds(), "error", err.Error())
-		return nil, fmt.Errorf("call TxBuilderClient.BuildSignRawData failed: %w", err)
+		return nil, err
 	}
-	log.Info("Build transaction completed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "time_cost_us", cost.Microseconds())
+	log.Info("Call txbuilder VerifyAddress succeeded", "trace_id", req.TraceId, "chain_code", chainCode, "is_valid", resp.IsValid, "time_cost_ms", cost.Milliseconds())
+	return resp, nil
+}
+
+func (c *Client) VerifyContractAddress(ctx context.Context, req *tbgrpc.VerifyContractAddressRequest, chainCode string) (*tbgrpc.VerifyContractAddressResponse, error) {
+	client, err := c.getClient(chainCode)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	log.Debug("Calling txbuilder VerifyContractAddress", "trace_id", req.TraceId, "chain_code", chainCode, "address_length", len(req.Address))
+	resp, err := client.VerifyContractAddress(ctx, req)
+	cost := time.Since(start)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Call txbuilder VerifyContractAddress succeeded", "trace_id", req.TraceId, "chain_code", chainCode, "is_valid", resp.IsValid, "time_cost_ms", cost.Milliseconds())
+	return resp, nil
+}
+
+func (c *Client) ConvertAddress(ctx context.Context, req *tbgrpc.ConvertAddressRequest, chainCode string) (*tbgrpc.ConvertAddressResponse, error) {
+	client, err := c.getClient(chainCode)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	log.Debug("Calling txbuilder ConvertAddress", "trace_id", req.TraceId, "chain_code", chainCode, "key_count", len(req.Keys))
+	resp, err := client.ConvertAddress(ctx, req)
+	cost := time.Since(start)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Call txbuilder ConvertAddress succeeded", "trace_id", req.TraceId, "chain_code", chainCode, "address_count", len(resp.Keys), "time_cost_ms", cost.Milliseconds())
+	return resp, nil
+}
+
+func (c *Client) CheckSufficientBalance(ctx context.Context, req *tbgrpc.CheckSufficientBalanceRequest) (*tbgrpc.CheckSufficientBalanceResponse, error) {
+	client, err := c.getClient(req.ChainCode)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	log.Debug("Calling txbuilder CheckSufficientBalance", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "from_address", req.FromAddress, "amount", req.Amount, "contract", req.Contract)
+	resp, err := client.CheckSufficientBalance(ctx, req)
+	cost := time.Since(start)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Call txbuilder CheckSufficientBalance succeeded", "trace_id", req.TraceId, "chain_code", req.ChainCode, "is_coin_sufficient", resp.IsCoinSufficient, "is_token_sufficient", resp.IsTokenSufficient, "time_cost_ms", cost.Milliseconds())
+	return resp, nil
+}
+
+func (c *Client) BuildSignRawData(ctx context.Context, req *tbgrpc.BuildSignRawDataRequest) (*tbgrpc.BuildSignRawDataResponse, error) {
+	client, err := c.getClient(req.ChainCode)
+	if err != nil {
+		return nil, err
+	}
+
+	start := time.Now()
+	log.Debug("Calling txbuilder BuildSignRawData", "trace_id", req.TraceId, "chain_code", req.ChainCode, "coin", req.Coin, "coin_symbol", req.CoinSymbol, "from_address", req.FromAddress, "to_address", req.ToAddress, "amount", req.Amount, "contract", req.Contract)
+	res, err := client.BuildSignRawData(ctx, req)
+	cost := time.Since(start)
+
+	if err != nil {
+		return nil, err
+	}
+	log.Info("Call txbuilder BuildSignRawData succeeded", "trace_id", req.TraceId, "chain_code", req.ChainCode, "raw_data_length", len(res.RawData), "msg_length", len(res.Msg), "time_cost_ms", cost.Milliseconds())
 	return res, nil
 }
 
 func (c *Client) TxBroadcast(ctx context.Context, in *tbgrpc.TxBroadcastRequest, chainCode string, opts ...grpc.CallOption) (*tbgrpc.TxBroadcastResponse, error) {
-	log.Debug("Calling tx broadcast", "trace_id", in.TraceId, "chain_code", chainCode)
 	client, err := c.getClient(chainCode)
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
+	log.Debug("Calling txbuilder TxBroadcast", "trace_id", in.TraceId, "chain_code", chainCode, "raw_data_length", len(in.RawData), "signature_length", len(in.Signature))
 	res, err := client.TxBroadcast(ctx, in, opts...)
 	cost := time.Since(start)
+
 	if err != nil {
-		log.Error("Call TxBuilderClient.TxBroadcast failed", "trace_id", in.TraceId, "chain_code", chainCode, "time_cost_us", cost.Microseconds(), "error", err.Error())
-		return nil, fmt.Errorf("call TxBuilderClient.TxBroadcast failed: %w", err)
+		return nil, err
 	}
-	log.Info("Broadcast transcation completed", "trace_id", in.TraceId, "chain_code", chainCode, "time_cost_us", cost.Microseconds())
+	log.Info("Call txbuilder TxBroadcast succeeded", "trace_id", in.TraceId, "chain_code", chainCode, "tx_hash", res.TxHash, "time_cost_ms", cost.Milliseconds())
 	return res, nil
 }
 
@@ -149,7 +173,7 @@ func (c *Client) getClient(chainCode string) (tbgrpc.TxBuilderClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("Get chain client", "chain_code", chainCode)
+	log.Debug("Got chain client", "chain_code", chainCode)
 	return cc.GetClient()
 }
 
@@ -189,7 +213,7 @@ func (c *Client) getOrCreate(chainCode string) (*ChainClient, error) {
 	}
 	addr, err := c.chainsPA.GetChainByCode(chainCode)
 	if err != nil {
-		return nil, fmt.Errorf("get chain(code=%s) from DB failed: %w", chainCode, err)
+		return nil, fmt.Errorf("get chain(code=%s) failed: %w", chainCode, err)
 	}
 	cc, err = newChainClient(chainCode, addr, c.cfg)
 	if err != nil {

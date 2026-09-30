@@ -158,11 +158,11 @@ func (c *Consumer) runLoop(consumer *rabbitmq.Consumer, queueName string) {
 		if err != nil {
 			// TODO 不管是什么错误，消息不再重入队列
 			// if IsPermanent(err) {
-			log.Error("Msg processed failed (permanent), reject without requeue", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "elapsed_ms", elapsed.Milliseconds())
+			log.Error("Msg processed failed (permanent)", "trace_id", msg.TraceID, "biz_id", msg.BizID, "queue", queueName, "error", err, "time_cost_ms", elapsed.Milliseconds())
 			return rabbitmq.NackDiscard
 		}
 
-		log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "elapsed_ms", elapsed.Milliseconds())
+		log.Info("Msg processed successfully", "trace_id", msg.TraceID, "biz_id", msg.BizID, "chain_code", msg.ChainCode, "queue", queueName, "time_cost_ms", elapsed.Milliseconds())
 		// 消息处理成功，通知 broker，内部调用Ack(false)
 		return rabbitmq.Ack
 	}

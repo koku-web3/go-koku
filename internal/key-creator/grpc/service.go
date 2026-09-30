@@ -13,6 +13,7 @@ import (
 
 	"github.com/koku-web3/go-koku/internal/key-creator/kms"
 	aead "github.com/koku-web3/go-koku/pkg/crypto"
+	"github.com/koku-web3/go-koku/pkg/errors"
 	"github.com/koku-web3/go-koku/pkg/hdwallet"
 	"github.com/koku-web3/go-koku/pkg/keyutil"
 	log "github.com/koku-web3/go-koku/pkg/logko"
@@ -56,7 +57,7 @@ func NewKeyCreatorService(
 	}
 }
 
-func (s *KeyCreatorService) Start(ctx context.Context) error {
+func (s *KeyCreatorService) Start(ctx context.Context, opt grpc.ServerOption) error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -65,10 +66,10 @@ func (s *KeyCreatorService) Start(ctx context.Context) error {
 
 	if s.tlsCfg != nil {
 		creds := credentials.NewTLS(s.tlsCfg)
-		s.grpcSrv = grpc.NewServer(grpc.Creds(creds))
+		s.grpcSrv = grpc.NewServer(grpc.Creds(creds), opt)
 		log.Info("Starting gRPC server with mTLS", "address", addr)
 	} else {
-		s.grpcSrv = grpc.NewServer()
+		s.grpcSrv = grpc.NewServer(opt)
 		log.Warn("Starting gRPC server without TLS (insecure)", "address", addr)
 	}
 	proto.RegisterKeyCreatorServer(s.grpcSrv, s)
@@ -86,14 +87,19 @@ func (s *KeyCreatorService) StopWhenCancelled(ctx context.Context) {
 }
 
 func (s *KeyCreatorService) Genesis(ctx context.Context, req *proto.GenesisRequest) (*proto.GenesisResponse, error) {
-	log.Info("Genesis called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "key_type", req.KeyType)
-
 	if err := validateGenesisRequest(req); err != nil {
-		log.Error("Genesis validation failed", "trace_id", req.TraceId, "error", err)
-		return nil, fmt.Errorf("invalid request: %w", err)
+		log.Warn("Invalid input parameter", "trace_id", req.TraceId, "field", "genesis", "error", err)
+		return nil, errors.InvalidArgument("genesis")
 	}
 
-	return s.generateThreeCoreKeys(req.TraceId, req.ChainCode, req.KeyType)
+	res, err := s.generateThreeCoreKeys(req.ChainCode)
+	if err != nil {
+		log.Error("Genesis failed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "error", err)
+		return nil, errors.Internal()
+	}
+
+	log.Info("Genesis succeeded!", "trace_id", req.TraceId, "chain_code", req.ChainCode, "derived_count", len(res.DerivedKeys))
+	return res, nil
 }
 
 // CreateOperationalKey 从指定 bip32.key 类型密钥派生子密钥
@@ -119,35 +125,34 @@ func (s *KeyCreatorService) CreateUserKey(ctx context.Context, req *proto.Create
 type keyNameFunc func(string) string
 
 func (s *KeyCreatorService) createDerivedKeys(req *proto.CreateKeyRequest, expectedUsage keyutil.AccountUsage, transitName string, getKeyName keyNameFunc) (*proto.CreateKeyResponse, error) {
-	log.Info("CreateKey called", "trace_id", req.TraceId, "chain_code", req.ChainCode, "bip44_path", req.Bip44Path, "account_index_start", req.AccountIndexStart, "count", req.Count, "key_type", req.KeyType, "bip32key_ciphertext_length", len(req.Bip32KeyCiphertext))
-
 	if err := validateCreateKeyRequest(req); err != nil {
-		log.Error("CreateKey validation failed", "trace_id", req.TraceId, "error", err)
-		return nil, fmt.Errorf("invalid request: %w", err)
+		log.Warn("Invalid input parameter", "trace_id", req.TraceId, "field", "create_key", "error", err)
+		return nil, errors.InvalidArgument("create_key")
 	}
 
-	// 检查 bip44Path 的 Account 是否匹配
 	usage, err := findUsage(req.Bip44Path)
 	if err != nil {
-		log.Error("Failed to resolve bip44_path account", "trace_id", req.TraceId, "error", err)
-		return nil, fmt.Errorf("invalid bip44Path: %w", err)
+		log.Error("Resolve bip44_path failed", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "error", err)
+		return nil, errors.InvalidArgument("bip44_path")
 	}
 	if usage != expectedUsage {
-		log.Error("Invalid bip44Path's account", "account", usage, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("Unsupported bip44Path(account=%d) in this API", usage)
+		log.Warn("Invalid bip44_path account", "trace_id", req.TraceId, "bip44_path", req.Bip44Path, "account", usage, "expected", expectedUsage)
+		return nil, errors.InvalidArgument("bip44_path")
 	}
 
-	// 根据不同加密算法获取算法实现
 	algo, err := algorithm.Get(req.KeyType)
 	if err != nil {
-		log.Error("Unsupported key type", "key_type", req.KeyType, "trace_id", req.TraceId)
-		return nil, fmt.Errorf("unsupported key type: %s", req.KeyType)
+		log.Error("Unsupported key type", "trace_id", req.TraceId, "key_type", req.KeyType)
+		return nil, errors.InvalidArgument("key_type")
 	}
 
 	res, err := s.deriveFifthDepthChildKeys(req, transitName, getKeyName(req.ChainCode), transit.Bip44PathToContext(req.Bip44Path), algo)
 	if err != nil {
-		return nil, fmt.Errorf("trace_id=%s %w", req.TraceId, err)
+		log.Error("CreateKey failed", "trace_id", req.TraceId, "chain_code", req.ChainCode, "error", err)
+		return nil, errors.Internal()
 	}
+
+	log.Info("CreateKey succeeded!", "trace_id", req.TraceId, "chain_code", req.ChainCode, "key_count", len(res.Keys))
 	return res, nil
 }
 
@@ -169,11 +174,11 @@ func (s *KeyCreatorService) createDerivedKeys(req *proto.CreateKeyRequest, expec
 //   - 加密后的 seed 可安全存储在数据库中；
 //   - 对于密钥的操作，直接使用 bip32.Key 类型；需要对密钥加密时，使用 Serialize() 序列化；
 //     需要解密时使用 NewMasterKey(seed) 从 seed 重建主密钥；
-func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType string) (*proto.GenesisResponse, error) {
+func (s *KeyCreatorService) generateThreeCoreKeys(chainCode string) (*proto.GenesisResponse, error) {
 	// 验证链是否支持 BIP-44
 	coinType, err := hdwallet.CoinTypeFromChainCode(chainCode)
 	if err != nil {
-		return nil, fmt.Errorf("unsupported %s chain for BIP-44", chainCode)
+		return nil, err
 	}
 
 	// ========== 步骤 1: 调用 vault 服务创建3把key ==========
@@ -182,7 +187,7 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 	//		   transit/operations/{chainCode}-privkey
 	//		   transit/user/{chainCode}-privkey
 	if err := s.createVaultKeys(chainCode); err != nil {
-		return nil, fmt.Errorf("call vault service to create 3 keys failed: %s", err.Error())
+		return nil, fmt.Errorf("call kMS to create 3 keys failed: %s", err.Error())
 	}
 
 	// ========== 步骤 2: 生成 HD 主密钥 seed ==========
@@ -199,7 +204,7 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 
 	masterKey, seed, err = hdwallet.GenerateBip32Key()
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate BIP32 master key: %w", err)
+		return nil, err
 	}
 
 	// 所有 bip32.Key 明文和 seed 在函数退出时统一擦除（LIFO 顺序)
@@ -260,35 +265,30 @@ func (s *KeyCreatorService) generateThreeCoreKeys(traceId, chainCode, keyType st
 	mkPathContext := transit.Bip44PathToContext(mkBip44Path)
 	masterSeedCiphertext, masterSeedDEKCiphertext, err := s.encryptWithDataKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), seed, mkPathContext)
 	if err != nil {
-		log.Error("Failed to encrypt master key seed with envelope encryption", "error", err, "trace_id", traceId, "chain_code", chainCode)
-		return nil, fmt.Errorf("failed to encrypt master key seed: %w", err)
+		return nil, fmt.Errorf("failed to encrypt masterKey's seed with data key: %w", err)
 	}
 
 	// 运营私钥
 	opBip44Path, err := hdwallet.OperationsPath(chainCode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate %s operations key path: %w", chainCode, err)
+		return nil, fmt.Errorf("failed to generate %s's operations-key path: %w", chainCode, err)
 	}
 	opPathContext := transit.Bip44PathToContext(opBip44Path)
 	opCiphertext, opDEKCiphertext, err := s.encryptWithDataKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), opKeyBytes, opPathContext)
 	if err != nil {
-		log.Error("Failed to encrypt operational key with envelope encryption", "error", err, "trace_id", traceId, "chain_code", chainCode)
-		return nil, fmt.Errorf("failed to encrypt operational key: %w", err)
+		return nil, fmt.Errorf("failed to encrypt operational's key with data key: %w", err)
 	}
 
 	// 用户私钥
 	userBip44Path, err := hdwallet.UserPath(chainCode)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate %s user key path: %w", chainCode, err)
+		return nil, fmt.Errorf("failed to generate %s's user-key path: %w", chainCode, err)
 	}
 	userPathContext := transit.Bip44PathToContext(userBip44Path)
 	userCiphertext, userDEKCiphertext, err := s.encryptWithDataKey(transit.CoreTransit, transit.GetKeyNameForCore(chainCode), userKeyBytes, userPathContext)
 	if err != nil {
-		log.Error("Failed to encrypt user key with envelope encryption", "error", err, "trace_id", traceId, "chain_code", chainCode)
-		return nil, fmt.Errorf("failed to encrypt user key: %w", err)
+		return nil, fmt.Errorf("failed to encrypt user's key with data key: %w", err)
 	}
-
-	log.Info("Genesis succeeded", "trace_id", traceId, "chain_code", chainCode, "key_type", keyType)
 
 	// ========== 步骤 6: 返回响应 ==========
 	return &proto.GenesisResponse{
@@ -408,7 +408,7 @@ func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyReques
 	keys := []*proto.DerivedChildKey{}
 	end := addrIdxStart + count
 	for i := addrIdxStart; i < end; i++ {
-		key, err := s.derive(bip32Change, i, algo, context, transitName, keyName)
+		key, err := s.derive(req.TraceId, bip32Change, i, algo, context, transitName, keyName)
 		if err != nil {
 			return nil, err
 		}
@@ -418,50 +418,45 @@ func (s *KeyCreatorService) deriveFifthDepthChildKeys(req *proto.CreateKeyReques
 	return &proto.CreateKeyResponse{Keys: keys}, nil
 }
 
-// dervie 从指定父密钥派生单个密钥
-func (s *KeyCreatorService) derive(bip32Change *bip32.Key, accountIndex uint32, algo algorithm.KeyAlgorithm, context string, transitName string, keyName string) (*proto.DerivedChildKey, error) {
-	// m/ 44'/ coinType'/ account'/ change / accountIndex （非强化）
+// derive 从指定父密钥派生单个密钥
+func (s *KeyCreatorService) derive(traceID string, bip32Change *bip32.Key, accountIndex uint32, algo algorithm.KeyAlgorithm, context string, transitName string, keyName string) (*proto.DerivedChildKey, error) {
 	childKey, err := bip32Change.NewChildKey(accountIndex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to derive child key at accountIndex %d : %w", accountIndex, err)
+		return nil, fmt.Errorf("failed to derive child key at account_index %d: %w", accountIndex, err)
 	}
-	// 擦除字节 childKey 密钥数据
 	defer securestore.MemzeroBip32Key(childKey)
 
 	privateKey, err := algo.NewPrivateKeyFromBytes(childKey.Key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wrap privatekey using key algorithm: %w", err)
+		return nil, fmt.Errorf("failed to wrap private key: %w", err)
 	}
 
 	securePrivateKey := securestore.NewSecurePrivateKey(privateKey, childKey.Key, algo.AlgorithmID())
-	// 擦除字节 privateKey 密钥数据
 	defer securePrivateKey.Clear()
 
 	privateKeyDER, err := algo.SerializePrivateKey(privateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to serialize private key to PKCS8 DER at accountIndex %d : %w", accountIndex, err)
+		return nil, fmt.Errorf("failed to serialize private key at account_index %d: %w", accountIndex, err)
 	}
-	// 擦除字节 privateKeyDER
 	defer securestore.Memzero(privateKeyDER)
 
 	bip44Path := hdwallet.ChildPath(context, hdwallet.ChangeExternal, accountIndex)
 	childContext := transit.Bip44PathToContext(bip44Path)
 	ciphertext, dekCiphertext, err := s.encryptWithDataKey(transitName, keyName, privateKeyDER, childContext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt child key at bip44 path %s: %w", bip44Path, err)
+		return nil, fmt.Errorf("failed to encrypt child key at bip44_path %s: %w", bip44Path, err)
 	}
 
-	// 获取 privateKey 的公钥
 	signer, ok := privateKey.(crypto.Signer)
 	if !ok {
-		return nil, fmt.Errorf("private key does not implement crypto.Signer at accountIndex %d", accountIndex)
+		return nil, fmt.Errorf("private key does not implement crypto.Signer at account_index %d", accountIndex)
 	}
 	publicKeyBytes, err := algo.SerializePublicKey(signer.Public())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get public key bytes at accountIndex %d: %w", accountIndex, err)
+		return nil, fmt.Errorf("failed to serialize public key at account_index %d: %w", accountIndex, err)
 	}
 
-	log.Info("Derive child key succeeded", "bip44_path", bip44Path, "account_index", accountIndex)
+	log.Info("Derive child key succeeded", "trace_id", traceID, "bip44_path", bip44Path, "account_index", accountIndex)
 
 	return &proto.DerivedChildKey{
 		AddressIndex:      accountIndex,
@@ -563,12 +558,12 @@ func encodePublicKeyToPEM(pubBytes []byte) string {
 func (s *KeyCreatorService) encryptWithDataKey(transitName, keyName string, plaintext []byte, context string) (string, string, error) {
 	dekKey, err := s.kmsServ.GenerateDataKey(transitName, keyName, context)
 	if err != nil {
-		return "", "", fmt.Errorf("generate data key failed: %w", err)
+		return "", "", fmt.Errorf("call kmsServ.GenerateData to generate data key failed: %w", err)
 	}
 
 	dekBytes, err := base64.StdEncoding.DecodeString(dekKey.Plaintext)
 	if err != nil {
-		return "", "", fmt.Errorf("decode DEK from base64 failed: %w", err)
+		return "", "", fmt.Errorf("decode DEK plaintext from base64 failed: %w", err)
 	}
 	defer securestore.Memzero(dekBytes)
 

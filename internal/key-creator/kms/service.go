@@ -199,7 +199,7 @@ func (k *KMS) Encrypt(transitName, keyName string, plaintext []byte, context str
 		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
 	}
 
-	log.Info("Call Vault Service", "path", encryptPath, "plaintext_length", len(plaintext), "context_length", len(context))
+	log.Debug("Call Vault encrypt", "transit_path", encryptPath, "plaintext_length", len(plaintext), "context_length", len(context))
 	// 调用 Vault API 执行加密
 	secret, err := k.vault.GetClient().Logical().Write(encryptPath, payload)
 	if err != nil {
@@ -282,7 +282,7 @@ func (k *KMS) DecryptDataKey(transitName, keyName, ciphertext, context string) (
 		payload["context"] = base64.StdEncoding.EncodeToString([]byte(context))
 	}
 
-	log.Debug("Decrypt data key via Vault", "path", decryptPath, "context_length", len(context))
+	log.Debug("Decrypt data key via Vault", "transit_path", decryptPath, "context_length", len(context), "ciphertext_length", len(ciphertext))
 	secret, err := k.vault.GetClient().Logical().Write(decryptPath, payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt data key: %w", err)

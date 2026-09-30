@@ -28,20 +28,20 @@ func NewTransferService(repo repository.KeyRepository, tx *txbuilder.Client, s *
 
 // verifyAddresses 验证 from 和 to 地址的有效性
 func (s *transferService) verifyAddresses(ctx context.Context, in *types.UniversalTransferInput) error {
-	verifyR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
-		TraceId: in.TraceID,
-		Address: in.FromAddress,
-	}, in.ChainCode)
-	if err != nil || !verifyR.IsValid {
-		return fmt.Errorf("%w: verify from_address failed: %s", tx.ErrNetwork, err)
+	verifyR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{TraceId: in.TraceID, Address: in.FromAddress}, in.ChainCode)
+	if err != nil {
+		return err
+	}
+	if !verifyR.IsValid {
+		return fmt.Errorf("fromAddress(%s) is invalid", in.FromAddress)
 	}
 
-	verifyToR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{
-		TraceId: in.TraceID,
-		Address: in.ToAddress,
-	}, in.ChainCode)
-	if err != nil || !verifyToR.IsValid {
-		return fmt.Errorf("%w: verify to_address failed: %s", tx.ErrNetwork, err)
+	verifyToR, err := s.txCli.VerifyAddress(ctx, &tbproto.VerifyAddressRequest{TraceId: in.TraceID, Address: in.ToAddress}, in.ChainCode)
+	if err != nil {
+		return err
+	}
+	if !verifyToR.IsValid {
+		return fmt.Errorf("toAddress(%s) is invalid", in.ToAddress)
 	}
 
 	return nil
@@ -50,12 +50,12 @@ func (s *transferService) verifyAddresses(ctx context.Context, in *types.Univers
 // verifyContract 验证合约地址
 func (s *transferService) verifyContract(ctx context.Context, in *types.UniversalTransferInput) error {
 	if in.Contract != "" {
-		contractR, err := s.txCli.VerifyContractAddress(ctx, &tbproto.VerifyContractAddressRequest{
-			TraceId: in.TraceID,
-			Address: in.Contract,
-		}, in.ChainCode)
-		if err != nil || !contractR.IsValid {
-			return fmt.Errorf("%w: verify contract address failed: %s", tx.ErrNetwork, err)
+		contractR, err := s.txCli.VerifyContractAddress(ctx, &tbproto.VerifyContractAddressRequest{TraceId: in.TraceID, Address: in.Contract}, in.ChainCode)
+		if err != nil {
+			return err
+		}
+		if !contractR.IsValid {
+			return fmt.Errorf("contractAddress(%s) is invalid", in.ToAddress)
 		}
 	}
 	return nil
@@ -72,7 +72,7 @@ func (s *transferService) checkBalance(ctx context.Context, in *types.UniversalT
 		Contract:    in.Contract,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: check sufficient balance failed: %s", tx.ErrNetwork, err)
+		return fmt.Errorf("check sufficient balance failed: %s", err)
 	}
 
 	var msgs []string
@@ -98,50 +98,58 @@ func (s *transferService) checkBalance(ctx context.Context, in *types.UniversalT
 	return fmt.Errorf("%s", strings.Join(msgs, "; "))
 }
 
-// signAndBroadcast 执行签名和广播交易
-func (s *transferService) signAndBroadcast(ctx context.Context, in *types.UniversalTransferInput, keyType string, key *model.ChindKey, rawDataR *tbproto.BuildSignRawDataResponse) (string, error) {
+// sign 执行签名
+func (s *transferService) sign(ctx context.Context, traceId, chainCode, keyType string, msg string, key *model.ChindKey) (string, error) {
+	if key.BIP44Path == "" {
+		return "", fmt.Errorf("BIP44Path is required")
+	}
+	if key.Ciphertext == "" {
+		return "", fmt.Errorf("Ciphertext is required")
+	}
+	if key.DEK_Ciphertext == "" {
+		return "", fmt.Errorf("DekCiphertext is required")
+	}
 	var sigResult *signer.SignResult
 	var err error
-	if keyutil.KEY_USAGE_OPERATIONAL.ToUin32() == in.KeyUsage {
-		sigResult, err = s.signer.SignAcct0(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext, key.DEK_Ciphertext)
+	if keyutil.KEY_USAGE_OPERATIONAL.ToUin32() == uint32(key.KeyUsage) {
+		sigResult, err = s.signer.SignAcct0(ctx, traceId, chainCode, key.BIP44Path, keyType, msg, key.Ciphertext, key.DEK_Ciphertext)
 	} else {
-		sigResult, err = s.signer.SignAcct1(ctx, in.TraceID, in.ChainCode, key.BIP44Path, keyType, rawDataR.Msg, key.Ciphertext, key.DEK_Ciphertext)
+		sigResult, err = s.signer.SignAcct1(ctx, traceId, chainCode, key.BIP44Path, keyType, msg, key.Ciphertext, key.DEK_Ciphertext)
 	}
 	if err != nil {
-		return "", fmt.Errorf("%w: sign failed: %s", tx.ErrSignFailed, err)
+		log.Error("Call signer Sign failed", "trace_id", traceId, "error", err)
+		return "", err
 	}
 
-	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{
-		TraceId:   in.TraceID,
-		RawData:   rawDataR.RawData,
-		Signature: sigResult.Signature,
-	}, in.ChainCode)
+	return sigResult.Signature, nil
+}
+
+// broadcast 执行广播交易
+func (s *transferService) broadcast(ctx context.Context, traceId, chainCode, keyType, signature, rawData string) (string, error) {
+	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{TraceId: traceId, RawData: rawData, Signature: signature}, chainCode)
 	if err != nil {
-		return "", fmt.Errorf("%w: broadcast failed: %s", tx.ErrBroadcastFailed, err)
+		log.Error("Call txbuilder TxBroadcast failed", "trace_id", traceId, "chain_code", chainCode, "error", err)
+		return "", err
 	}
-	if !broadcastR.Success {
-		return "", fmt.Errorf("%w: broadcast returned failure", tx.ErrBroadcastFailed)
-	}
-
 	return broadcastR.TxHash, nil
 }
 
 func (s *transferService) UniversalTransfer(ctx context.Context, in *types.UniversalTransferInput) (*types.UniversalTransferResult, error) {
 	if err := s.validateInput(in); err != nil {
-		return nil, fmt.Errorf("%w: %s", tx.ErrInvalidParam, err)
+		return nil, err
 	}
 
 	chain, err := s.repo.GetChainByCode(ctx, in.ChainCode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: get chain key by chain code failed: %s", tx.ErrNetwork, err)
+		return nil, err
 	}
 
 	key, err := s.repo.GetKeyByAddress(ctx, in.ChainCode, in.FromAddress)
 	if err != nil {
-		return nil, fmt.Errorf("%w: get key by address failed: %s", tx.ErrNetwork, err)
+		return nil, err
 	}
 	if key == nil {
-		return nil, fmt.Errorf("%w: key not found for address %s", tx.ErrKeyNotFound, in.FromAddress)
+		return nil, fmt.Errorf("key data not found for address %s", in.FromAddress)
 	}
 
 	if err := s.verifyAddresses(ctx, in); err != nil {
@@ -168,10 +176,16 @@ func (s *transferService) UniversalTransfer(ctx context.Context, in *types.Unive
 	})
 
 	if err != nil {
+		log.Error("Call txbuilder BuildSignRawData failed", "trace_id", in.TraceID, "chain_code", in.ChainCode, "error", err)
 		return nil, err
 	}
 
-	txHash, err := s.signAndBroadcast(ctx, in, chain.KeyType, key, rawDataR)
+	signature, err := s.sign(ctx, in.TraceID, in.ChainCode, chain.KeyType, rawDataR.RawData, key)
+	if err != nil {
+		return nil, err
+	}
+
+	txHash, err := s.broadcast(ctx, in.TraceID, in.ChainCode, chain.KeyType, signature, rawDataR.RawData)
 	if err != nil {
 		return nil, err
 	}

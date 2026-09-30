@@ -241,7 +241,7 @@ func (v *VaultClient) Authenticate() error {
 	v.leaseTime = time.Now().Add(time.Duration(authInfo.Auth.LeaseDuration) * time.Second) // 计算过期时间
 	v.client.SetToken(v.token)                                                             // 同时更新 API 客户端的 token
 
-	log.Info("Vault authentication successful", "token_id", authInfo.Auth.ClientToken, "accessor", authInfo.Auth.Accessor, "lease_duration", fmt.Sprintf("%ds", authInfo.Auth.LeaseDuration), "refresh_interval", fmt.Sprintf("%ds", v.cfg.TokenRefreshInterval), "policies", authInfo.Auth.Policies)
+	log.Info("Vault authentication successful", "token_id", "[REDACTED]", "lease_duration", authInfo.Auth.LeaseDuration, "refresh_interval", v.cfg.TokenRefreshInterval, "policies", authInfo.Auth.Policies)
 	return nil
 }
 

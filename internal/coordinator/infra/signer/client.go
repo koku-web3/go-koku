@@ -70,16 +70,7 @@ func (c *Client) SignAcct1(ctx context.Context, traceID, chainCode, bip44Path, k
 
 type signFn func(context.Context, *signergrpc.SignRequest, ...grpc.CallOption) (*signergrpc.SignResponse, error)
 
-func (c *Client) sign(ctx context.Context, traceID, chainCode, bip44Path, keyType, message, privKeyCiphertext, dekCiphertext string, signFunc signFn) (*SignResult, error) {
-	log.Info("Signing request", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path)
-
-	if bip44Path == "" {
-		return nil, fmt.Errorf("bip44_path is required")
-	}
-	if privKeyCiphertext == "" {
-		return nil, fmt.Errorf("priv_key_ciphertext is required")
-	}
-
+func (c *Client) sign(ctx context.Context, traceID, chainCode, bip44Path, keyType string, message, privKeyCiphertext, dekCiphertext string, signFunc signFn) (*SignResult, error) {
 	req := &signergrpc.SignRequest{
 		TraceId:           traceID,
 		ChainCode:         chainCode,
@@ -89,13 +80,13 @@ func (c *Client) sign(ctx context.Context, traceID, chainCode, bip44Path, keyTyp
 		PrivKeyCiphertext: privKeyCiphertext,
 		DekCiphertext:     dekCiphertext,
 	}
-	signStart := time.Now()
-	resp, err := signFunc(ctx, req)
-	signCost := time.Since(signStart)
-	log.Info("Sign completed", "time_cost_us", signCost.Microseconds(), "success", err == nil)
+	log.Debug("Calling signer Sign", "trace_id", traceID, "chain_code", chainCode, "bip44_path", bip44Path, "key_type", keyType, "message_length", len(message), "privkey_ciphertext_length", len(privKeyCiphertext), "dek_ciphertext_length", len(dekCiphertext))
+	start := time.Now()
+	res, err := signFunc(ctx, req)
+	cost := time.Since(start)
 	if err != nil {
-		return nil, fmt.Errorf("sign failed: %w", err)
+		return nil, err
 	}
-
-	return &SignResult{TraceID: traceID, Signature: resp.Signature}, nil
+	log.Info("Call signer Sign succeeded", "trace_id", traceID, "time_cost_ms", cost.Milliseconds(), "signature_length", len(res.Signature))
+	return &SignResult{TraceID: traceID, Signature: res.Signature}, nil
 }

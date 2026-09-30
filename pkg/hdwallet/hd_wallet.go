@@ -107,7 +107,7 @@ func MasterKeyPath(chainCode string) (string, error) {
 func CoinTypeFromChainCode(chainCode string) (uint32, error) {
 	coinType, ok := CoinTypes[chainCode]
 	if !ok {
-		return 0, fmt.Errorf("unsupported chain: %s", chainCode)
+		return 0, fmt.Errorf("%s chain does not support the bip-44 specification", chainCode)
 	}
 	// 移除强化派生前缀，返回实际的 coin_type
 	return coinType - 0x80000000, nil

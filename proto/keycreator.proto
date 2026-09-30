@@ -24,7 +24,6 @@ message HealthCheckResponse {
 }
 
 
-
 // 派生的密钥数据
 message DerivedCoreKey {
   uint32 key_usage = 1; //0：运营密钥进行签名；场景：归集、出账；1：用户密钥进行签名出账；场景：归集
@@ -48,7 +47,6 @@ message DerivedChildKey {
 message GenesisRequest {
   string trace_id = 1; // 链路跟踪ID，必填
   string chain_code = 2; // 区块链名称，如：bitcoin、ethereum、tron，1-36必填
-  string key_type = 3; // 密钥类型，如ecdsa-secp256k1、ecdsa-secp256r1、eddsa-ed25519，1-36必填
 }
 
 message GenesisResponse {

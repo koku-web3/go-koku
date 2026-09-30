@@ -12,6 +12,7 @@ import (
 	"github.com/koku-web3/go-koku/internal/signer/grpc"
 	"github.com/koku-web3/go-koku/internal/signer/infra/setup"
 	log "github.com/koku-web3/go-koku/pkg/logko"
+	"github.com/koku-web3/go-koku/pkg/middleware"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
 		cancel()
 	}()
 
-	if err := signerSvc.Start(ctx); err != nil {
+	if err := signerSvc.Start(ctx, middleware.UnaryServerInterceptor()); err != nil {
 		panic(fmt.Errorf("gRPC server error:%v", err))
 	}
 }

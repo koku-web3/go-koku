@@ -12,6 +12,7 @@ import (
 	"github.com/koku-web3/go-koku/internal/key-creator/grpc"
 	"github.com/koku-web3/go-koku/internal/key-creator/infra/setup"
 	log "github.com/koku-web3/go-koku/pkg/logko"
+	"github.com/koku-web3/go-koku/pkg/middleware"
 )
 
 func main() {
@@ -44,7 +45,7 @@ func main() {
 		cancel()
 	}()
 
-	if err := kcServ.Start(ctx); err != nil {
+	if err := kcServ.Start(ctx, middleware.UnaryServerInterceptor()); err != nil {
 		panic(fmt.Errorf("gRPC server error:%v", err))
 	}
 }

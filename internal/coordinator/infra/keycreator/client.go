@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	log "github.com/koku-web3/go-koku/pkg/logko"
 	kvgrpc "github.com/koku-web3/go-koku/pkg/proto/key-creator"
@@ -85,30 +86,25 @@ func (c *Client) Address() string {
 }
 
 func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string) (*GenesisResult, error) {
-	log.Info("KeyCreatorClient.Genesis", "trace_id", traceID, "chain_code", chainCode, "key_type", keyType)
-
-	if traceID == "" {
-		return nil, fmt.Errorf("trace_id is required")
-	}
-	if chainCode == "" {
-		return nil, fmt.Errorf("chain_code is required")
-	}
 	if keyType == "" {
 		return nil, fmt.Errorf("key_type is required")
 	}
 
-	resp, err := c.keyCreator.Genesis(ctx, &kvgrpc.GenesisRequest{
+	start := time.Now()
+	log.Debug("Calling key-creator Genesis", "trace_id", traceID, "chain_code", chainCode, "key_type", keyType)
+	res, err := c.keyCreator.Genesis(ctx, &kvgrpc.GenesisRequest{
 		TraceId:   traceID,
 		ChainCode: chainCode,
 		KeyType:   keyType,
 	})
+	cost := time.Since(start)
 	if err != nil {
-		log.Error("KeyCreatorClient.Genesis failed", "trace_id", traceID, "error", err.Error())
-		return nil, fmt.Errorf("keycreator Genesis failed: %w", err)
+		return nil, err
 	}
 
-	derivedKeys := make([]DerivedCoreKeyResult, 0, len(resp.DerivedKeys))
-	for _, dk := range resp.DerivedKeys {
+	log.Info("Call key-creator Genesis succeeded", "trace_id", traceID, "seed_ciphertext_length", len(res.SeedCiphertext), "dek_ciphertext_length", len(res.DekCiphertext), "derived_count", len(res.DerivedKeys), "time_cost_ms", cost.Milliseconds())
+	derivedKeys := make([]DerivedCoreKeyResult, 0, len(res.DerivedKeys))
+	for _, dk := range res.DerivedKeys {
 		derivedKeys = append(derivedKeys, DerivedCoreKeyResult{
 			KeyUsage:           dk.KeyUsage,
 			Bip32KeyCiphertext: dk.Bip32KeyCiphertext,
@@ -120,10 +116,10 @@ func (c *Client) Genesis(ctx context.Context, traceID, chainCode, keyType string
 
 	return &GenesisResult{
 		TraceID:        traceID,
-		SeedCiphertext: resp.GetSeedCiphertext(),
-		DEKCiphertext:  resp.GetDekCiphertext(),
-		Context:        resp.GetContext(),
-		Bip44Path:      resp.GetBip44Path(),
+		SeedCiphertext: res.GetSeedCiphertext(),
+		DEKCiphertext:  res.GetDekCiphertext(),
+		Context:        res.GetContext(),
+		Bip44Path:      res.GetBip44Path(),
 		DerivedKeys:    derivedKeys,
 	}, nil
 }
@@ -150,21 +146,8 @@ func (c *Client) CreateUserKey(ctx context.Context, params CreateKeyParams) (*Cr
 }
 
 func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc, params CreateKeyParams) (*CreateKeyResult, error) {
-	log.Info(fmt.Sprintf("KeyCreatorClient.Create%sKey", keyType), "trace_id", params.TraceID, "chain_code", params.ChainCode, "bip44_path", params.Bip44Path, "account_index_start", params.AccountIndexStart, "count", params.Count)
-
-	if params.TraceID == "" {
-		return nil, fmt.Errorf("trace_id is required")
-	}
-	if params.ChainCode == "" {
-		return nil, fmt.Errorf("chain_code is required")
-	}
-	if params.Bip32KeyCiphertext == "" {
-		return nil, fmt.Errorf("bip32key_ciphertext is required")
-	}
-	if params.DEKCiphertext == "" {
-		return nil, fmt.Errorf("dek_ciphertext is required")
-	}
-
+	log.Debug("Calling key-creator CreateKey", "trace_id", params.TraceID, "key_type", keyType, "chain_code", params.ChainCode, "bip44_path", params.Bip44Path, "account_index_start", params.AccountIndexStart, "count", params.Count)
+	start := time.Now()
 	resp, err := fn(ctx, &kvgrpc.CreateKeyRequest{
 		TraceId:            params.TraceID,
 		ChainCode:          params.ChainCode,
@@ -175,10 +158,11 @@ func (c *Client) createKey(ctx context.Context, keyType string, fn createKeyFunc
 		DekCiphertext:      params.DEKCiphertext,
 		KeyType:            params.AlgoType,
 	})
+	cost := time.Since(start)
 	if err != nil {
-		log.Error(fmt.Sprintf("Call key-creator server to create %s Key failed", keyType), "trace_id", params.TraceID, "error", err.Error())
-		return nil, fmt.Errorf("call key-creator server to Create%sKey failed: %w", keyType, err)
+		return nil, err
 	}
+	log.Info("Call key-creator CreateKey succeeded", "trace_id", params.TraceID, "key_type", keyType, "key_count", len(resp.Keys), "time_cost_ms", cost.Milliseconds())
 
 	return parseCreateKeyResponse(resp), nil
 }
