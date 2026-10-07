@@ -11,8 +11,8 @@ import (
 	"github.com/koku-web3/go-koku/internal/key-creator/config"
 	"github.com/koku-web3/go-koku/internal/key-creator/grpc"
 	"github.com/koku-web3/go-koku/internal/key-creator/infra/setup"
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	"github.com/koku-web3/go-koku/pkg/middleware"
+	log "github.com/koku-web3/logko"
 )
 
 func main() {

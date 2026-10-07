@@ -91,29 +91,6 @@ volumes:
 
 确保运行前先执行 `./scripts/gen-certs.sh` 生成证书。
 
-## 证书轮换流程
-
-### 服务端证书轮换
-
-1. 用新私钥生成 CSR（证书签名请求）
-2. 用 CA 签发新证书
-3. 替换 `server/*.pem` 和 `server/*.key`（保持文件名不变）
-4. 滚动重启服务（无需更新配置）
-
-### 客户端证书轮换
-
-1. 生成新客户端私钥和 CSR
-2. 用 CA 签发新证书
-3. 替换 `client/coordinator.pem` 和 `client/coordinator.key`
-4. 滚动重启 coordinator（无需更新配置）
-
-### CA 轮换（较少见）
-
-1. 生成新 CA 私钥和自签证书
-2. 用新 CA 重新签发所有服务端和客户端证书
-3. 更新所有服务的 CA 证书文件（`ca/ca.pem`）
-4. 全量重启所有服务
-
 ## 验证 mTLS 握手
 
 使用 `openssl s_client` 验证与服务端的连接：

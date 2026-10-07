@@ -77,7 +77,7 @@
   - 选择 "权限"（Permissions） 标签
   - 点击 "添加内联策略"（Add inline policy）
 - 创建策略 
- ```json
+```json
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -88,7 +88,7 @@
         }
     ]
 }
- ```
+```
 - 保存策略，输入名称`AllowGetRoleForVault`
 
 **3.5 查看用户**

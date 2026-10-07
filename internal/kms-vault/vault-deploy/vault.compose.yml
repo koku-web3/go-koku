@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------
-# 项目名称（project）：作为容器名前缀（prod-vault-1、prod-vault-2、prod-vault-3）
+# 项目名称（project）：作为容器名前缀（kms-vault-1、kms-vault-2、kms-vault-3）
 # ------------------------------------------------------------------
-name: prod
+name: kms
 
 services:
   # ==================================================================
@@ -30,14 +30,14 @@ services:
   vault-1:
     extends:
       service: vault-base # 继承 vault-base 的 volumes/env_file/networks/build 配置
-    container_name: prod-vault-1 # 容器名（其他节点靠这个名字通过网络访问它）
-    hostname: prod-vault-1 # 容器内部主机名, 同时也是集群内其他节点 retry_join 时用到的地址
+    container_name: kms-vault-1 # 容器名（其他节点靠这个名字通过网络访问它）
+    hostname: kms-vault-1 # 容器内部主机名, 同时也是集群内其他节点 retry_join 时用到的地址
     volumes:
       # bind mount: 节点 1 的 Raft 数据持久化到宿主机项目内目录
       # 使用相对路径, 部署到任意机器时无需修改 compose 文件
       - ../data/1:/vault/data
     environment:
-      VAULT_ADDR: https://prod-vault-1:8200 # 本节点对外提供服务的地址（本机 CLI 调用可用）
+      VAULT_ADDR: https://kms-vault-1:8200 # 本节点对外提供服务的地址（本机 CLI 调用可用）
       NODE_IDX: "1" # 告诉 Dockerfile 的 CMD 加载 vault-1.hcl 配置
     ports:
       - "8200:8200" # 宿主机端口:容器端口, 这样容器外部就可以直接使用如 127.0.0.1:8200 访问; 在这个例子中只对外开放了节点1, vault 开启了HA集群所以如果节点 1 不是 leader 它会转发给其他节点
@@ -48,13 +48,13 @@ services:
   vault-2:
     extends:
       service: vault-base
-    container_name: prod-vault-2
-    hostname: prod-vault-2
+    container_name: kms-vault-2
+    hostname: kms-vault-2
     volumes:
       # bind mount: 节点 2 的 Raft 数据持久化到宿主机项目内目录
       - ../data/2:/vault/data
     environment:
-      VAULT_ADDR: https://prod-vault-2:8200
+      VAULT_ADDR: https://kms-vault-2:8200
       NODE_IDX: "2"
 
   # ==================================================================
@@ -63,13 +63,13 @@ services:
   vault-3:
     extends:
       service: vault-base
-    container_name: prod-vault-3
-    hostname: prod-vault-3
+    container_name: kms-vault-3
+    hostname: kms-vault-3
     volumes:
       # bind mount: 节点 3 的 Raft 数据持久化到宿主机项目内目录
       - ../data/3:/vault/data
     environment:
-      VAULT_ADDR: https://prod-vault-3:8200
+      VAULT_ADDR: https://kms-vault-3:8200
       NODE_IDX: "3"
 
 # ------------------------------------------------------------------

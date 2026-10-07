@@ -60,12 +60,12 @@ openssl genrsa -out "$VAULT_KEY" 4096 2>/dev/null
 
 echo "  生成 Vault CSR..."
 openssl req -new -key "$VAULT_KEY" \
-    -subj "/CN=prod-vault" \
+    -subj "/CN=kms-vault" \
     -out "$VAULT_CSR" 2>/dev/null
 
 echo "  使用 CA 签发 Vault 证书..."
 VAULT_EXT=$(mktemp)
-printf "subjectAltName=DNS:prod-vault-1,DNS:prod-vault-2,DNS:prod-vault-3,IP:127.0.0.1" > "$VAULT_EXT"
+printf "subjectAltName=DNS:kms-vault-1,DNS:kms-vault-2,DNS:kms-vault-3,IP:127.0.0.1" > "$VAULT_EXT"
 openssl x509 \
     -req \
     -in "$VAULT_CSR" \
@@ -109,7 +109,11 @@ EOF
         -days $DAYS -sha256 \
         -extfile "$OUT_DIR/server/${name}.ext" 2>/dev/null
     rm -f "$OUT_DIR/server/${name}.csr" "$OUT_DIR/server/${name}.ext"
-    chmod 600 "$OUT_DIR/server/${name}.key"
+    # 0644 (not 0600): the containers run as the non-root uid 10001, but the
+    # keys are bind-mounted from the host, so they stay owned by the host user
+    # and the container process would not be able to read a 0600 file.
+    # These are throwaway local/dev mTLS keys; tighten this for real deployments.
+    chmod 644 "$OUT_DIR/server/${name}.key"
     echo "  $OUT_DIR/server/${name}.pem/.key"
 done
 
@@ -119,4 +123,3 @@ echo "CA 指纹:"
 openssl x509 -in "$OUT_DIR/ca/ca.pem" -noout -fingerprint -sha256 | tr -d ':' | sed 's/.*=//'
 
 echo ""
-echo "生产部署时请将 certs/ 目录挂载到容器内 /etc/koku/certs/"

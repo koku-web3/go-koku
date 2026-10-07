@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"os"
 
 	"github.com/koku-web3/go-koku/internal/key-creator/config"
 	"github.com/koku-web3/go-koku/internal/key-creator/kms"
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	"github.com/koku-web3/go-koku/pkg/tlsconfig"
+	log "github.com/koku-web3/logko"
 )
 
 // Dependencies 聚合启动时所需配置选
@@ -20,15 +21,30 @@ type Deps struct {
 
 // Wire 一次性完成：TLS 派生 + KMS client 构造。
 // KMS client 内部已同步完成 Vault 首次认证，装配即就绪。
+// AWS 凭证优先从环境变量获取。
 func Wire(ctx context.Context, cfg *config.Config) (*Deps, error) {
 	srvTLS, err := buildTLS(cfg)
 	if err != nil {
 		return nil, err
 	}
 
+	// 优先使用环境变量覆盖配置文件中的 AWS 凭证
+	if accessKey := os.Getenv("AWS_ACCESS_KEY"); accessKey != "" {
+		cfg.AWS.AccessKey = accessKey
+		log.Warn("AWS access_key from environment variable overrides config file")
+	}
+	if secretKey := os.Getenv("AWS_SECRET_KEY"); secretKey != "" {
+		cfg.AWS.SecretKey = secretKey
+		log.Warn("AWS secret_key from environment variable overrides config file")
+	}
+	if roleARN := os.Getenv("AWS_ROLE_ARN"); roleARN != "" {
+		cfg.AWS.RoleARN = roleARN
+		log.Warn("AWS role_arn from environment variable overrides config file")
+	}
+
 	kmsClient, err := kms.NewKMS(ctx, &cfg.Vault, &cfg.AWS)
 	if err != nil {
-		return nil, fmt.Errorf("kms client: %w", err)
+		return nil, fmt.Errorf("new kms client failed: %w", err)
 	}
 
 	return &Deps{KMS: kmsClient, ServerTLS: srvTLS}, nil

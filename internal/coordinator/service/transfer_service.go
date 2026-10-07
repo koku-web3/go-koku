@@ -12,8 +12,8 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/tx"
 	"github.com/koku-web3/go-koku/internal/coordinator/types"
 	"github.com/koku-web3/go-koku/pkg/keyutil"
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	tbproto "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
+	log "github.com/koku-web3/logko"
 )
 
 type transferService struct {
@@ -125,10 +125,10 @@ func (s *transferService) sign(ctx context.Context, traceId, chainCode, keyType 
 }
 
 // broadcast 执行广播交易
-func (s *transferService) broadcast(ctx context.Context, traceId, chainCode, keyType, signature, rawData string) (string, error) {
-	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{TraceId: traceId, RawData: rawData, Signature: signature}, chainCode)
+func (s *transferService) broadcast(ctx context.Context, traceId, chainCode, keyType, signature, rawData, fromAddress string) (string, error) {
+	broadcastR, err := s.txCli.TxBroadcast(ctx, &tbproto.TxBroadcastRequest{TraceId: traceId, FromAddress: fromAddress, RawData: rawData, Signature: signature}, chainCode)
 	if err != nil {
-		log.Error("Call txbuilder TxBroadcast failed", "trace_id", traceId, "chain_code", chainCode, "error", err)
+		log.Error("Call txbuilder TxBroadcast failed", "trace_id", traceId, "chain_code", chainCode, "from_address", fromAddress, "error", err)
 		return "", err
 	}
 	return broadcastR.TxHash, nil
@@ -180,12 +180,12 @@ func (s *transferService) UniversalTransfer(ctx context.Context, in *types.Unive
 		return nil, err
 	}
 
-	signature, err := s.sign(ctx, in.TraceID, in.ChainCode, chain.KeyType, rawDataR.RawData, key)
+	signature, err := s.sign(ctx, in.TraceID, in.ChainCode, chain.KeyType, rawDataR.Msg, key)
 	if err != nil {
 		return nil, err
 	}
 
-	txHash, err := s.broadcast(ctx, in.TraceID, in.ChainCode, chain.KeyType, signature, rawDataR.RawData)
+	txHash, err := s.broadcast(ctx, in.TraceID, in.ChainCode, chain.KeyType, signature, rawDataR.RawData, in.FromAddress)
 	if err != nil {
 		return nil, err
 	}

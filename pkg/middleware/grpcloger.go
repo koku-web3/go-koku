@@ -4,26 +4,26 @@ import (
 	"context"
 	"time"
 
-	log "github.com/koku-web3/go-koku/pkg/logko"
+	log "github.com/koku-web3/logko"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// UnaryServerInterceptor returns a gRPC unary server interceptor that logs
-// method entry (Debug) and exit (Info/Warn/Error) with time_cost_ms and
-// structured fields following the logging specification.
+// UnaryServerInterceptor 返回一个 gRPC 的一元服务器拦截器，负责日志输出：
+// 方法入口（Debug）和方法返回（Info/Warn/Error），日志包含 time_cost_ms 及
+// 按规范结构化字段。
 //
-// Entry Debug prints: "Method received", trace_id, and whitelisted request fields.
-// Exit logs are chosen by gRPC status code:
-//   - OK                        → Info  with time_cost_ms
-//   - InvalidArgument           → Warn  with trace_id + error
-//   - FailedPrecondition        → Warn  with trace_id + error
-//   - NotFound / AlreadyExists  → Warn  with trace_id + error
-//   - PermissionDenied          → Warn  with trace_id + error
-//   - Unauthenticated          → Error with trace_id + error
-//   - Unavailable               → Error with trace_id + error
-//   - Internal / Unknown       → Error with trace_id + error
+// 入口 Debug 日志输出："Method received"、trace_id 以及白名单请求字段。
+// 出口日志根据 gRPC 状态码分别：
+//   - OK                        → Info，包含 time_cost_ms
+//   - InvalidArgument           → Warn，包含 trace_id 和 error
+//   - FailedPrecondition        → Warn，包含 trace_id 和 error
+//   - NotFound / AlreadyExists  → Warn，包含 trace_id 和 error
+//   - PermissionDenied          → Warn，包含 trace_id 和 error
+//   - Unauthenticated           → Error，包含 trace_id 和 error
+//   - Unavailable               → Error，包含 trace_id 和 error
+//   - Internal / Unknown        → Error，包含 trace_id 和 error
 func UnaryServerInterceptor() grpc.ServerOption {
 	return grpc.UnaryInterceptor(unaryServerInterceptor)
 }
@@ -38,7 +38,7 @@ func unaryServerInterceptor(
 
 	traceID := extractTraceID(req)
 
-	// Entry Debug: trace_id must be first field
+	// 入口 Debug 日志：trace_id 必须是第一个字段
 	log.Debug("gRPC method received",
 		"trace_id", traceID,
 		"method", info.FullMethod,
@@ -86,7 +86,7 @@ func unaryServerInterceptor(
 			"error", err,
 			"time_cost_ms", costMs,
 		)
-	default: // codes.Internal, codes.Unknown, etc.
+	default: // codes.Internal, codes.Unknown, 等
 		log.Error("gRPC method failed",
 			"trace_id", traceID,
 			"method", info.FullMethod,
@@ -99,8 +99,8 @@ func unaryServerInterceptor(
 	return resp, err
 }
 
-// extractTraceID tries to extract trace_id from the request by checking
-// the most common field names. Returns empty string if not found.
+// extractTraceID 尝试通过检测常见字段名从请求中提取 trace_id。
+// 如果未找到，则返回空字符串。
 func extractTraceID(req interface{}) string {
 	switch r := req.(type) {
 	case interface{ GetTraceId() string }:

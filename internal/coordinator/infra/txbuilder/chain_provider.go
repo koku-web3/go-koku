@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
-	log "github.com/koku-web3/go-koku/pkg/logko"
+	log "github.com/koku-web3/logko"
 )
 
 // chainProviderAdapter 用于将 KeyRepository 适配为 ChainProvider 接口

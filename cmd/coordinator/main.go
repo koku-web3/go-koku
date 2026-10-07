@@ -14,7 +14,7 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/infra/setup"
 	"github.com/koku-web3/go-koku/internal/coordinator/mq"
 	"github.com/koku-web3/go-koku/internal/coordinator/service"
-	log "github.com/koku-web3/go-koku/pkg/logko"
+	log "github.com/koku-web3/logko"
 )
 
 func main() {

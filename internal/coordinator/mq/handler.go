@@ -8,7 +8,7 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
 	"github.com/koku-web3/go-koku/internal/coordinator/tx"
 	"github.com/koku-web3/go-koku/internal/coordinator/types"
-	log "github.com/koku-web3/go-koku/pkg/logko"
+	log "github.com/koku-web3/logko"
 )
 
 type Handler struct {

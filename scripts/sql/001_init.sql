@@ -6,6 +6,14 @@
 -- 1. 创建数据库
 CREATE DATABASE IF NOT EXISTS kokudb DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci;
 
+-- 授权给 compose 中的应用账号。
+-- docker-compose 的 MYSQL_DATABASE 只会给 MYSQL_USER 授权到该库；若该值与
+-- kokudb 不一致（或数据卷是在旧配置下初始化的），应用就会报
+-- "Access denied for user 'koku'@'%' to database 'kokudb'"。
+-- 这里显式补一次授权，保证与 [db] 配置一致。
+GRANT ALL PRIVILEGES ON kokudb.* TO 'koku'@'%';
+FLUSH PRIVILEGES;
+
 -- 使用数据库
 USE kokudb;
 
@@ -34,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `chains` (
 -- =====================================================
 
 -- Ethereum Sepolia 测试网配置
+-- 注意：tx_builder_serv_grpc 必须是 txbuilder 容器在 compose 网络中的地址
 INSERT INTO `chains` (
     `chain_code`,
     `base_coin`,
@@ -50,7 +59,7 @@ INSERT INTO `chains` (
     'https://ethereum-sepolia-rpc.publicnode.com',
     'https://sepolia.etherscan.io/',
     12,
-    '127.0.0.1:51051',
+    'txbuilder-ethereum:51051',
     'http://127.0.0.1:81051'
 ) ON DUPLICATE KEY UPDATE
     `base_coin` = VALUES(`base_coin`),

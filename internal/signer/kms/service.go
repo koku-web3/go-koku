@@ -9,8 +9,8 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/koku-web3/go-koku/internal/signer/config"
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	"github.com/koku-web3/go-koku/pkg/vault"
+	log "github.com/koku-web3/logko"
 )
 
 type KMS struct {

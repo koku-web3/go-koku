@@ -9,7 +9,7 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/config"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
 	"github.com/koku-web3/go-koku/internal/coordinator/tx"
-	log "github.com/koku-web3/go-koku/pkg/logko"
+	log "github.com/koku-web3/logko"
 	"github.com/wagslane/go-rabbitmq"
 )
 

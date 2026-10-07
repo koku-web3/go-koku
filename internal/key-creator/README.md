@@ -67,7 +67,7 @@ internal/key-creator/
 **认证方式**: mTLS 双向认证（服务端和客户端证书复用）
 
 ---
-
+> 注意：在开始前，请确认 KMS 服务器已部署成功。未部署请转到[HashiCorp Vault 部署与配置](../kms-vault/README.md)。
 
 
 ## 1. gRPC 接口

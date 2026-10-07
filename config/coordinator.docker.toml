@@ -57,8 +57,9 @@ reconnect_interval_sec = 5
 [db]
 host = "mysql"
 port = 3306
-user = "root"
-password = "123456"
+# 必须与 docker-compose.yml 中 mysql 服务设置的 MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE 保持一致。
+user = "koku"
+password = "koku_pwd"
 database = "kokudb"
 max_open_conns = 1000
 max_idle_conns = 1000

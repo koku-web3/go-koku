@@ -128,13 +128,20 @@ type MQConfig struct {
 var cfg *Config
 
 const (
-	DEFAULT_PATH = "config/coordinator.toml"
+	DEFAULT_PATH = ""
 )
 
 func LoadConfig(path string) (*Config, error) {
-	_, err := os.Stat(path)
+	if path == "" {
+		return nil, fmt.Errorf("config file path is required")
+	}
+
+	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("config file not found: %w", err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("config path is a directory, expected a file: %s", path)
 	}
 
 	cfg = &Config{}

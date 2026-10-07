@@ -11,8 +11,8 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/infra/txbuilder"
 	"github.com/koku-web3/go-koku/internal/coordinator/model"
 	"github.com/koku-web3/go-koku/internal/coordinator/repository"
-	"github.com/koku-web3/go-koku/pkg/logko"
 	"github.com/koku-web3/go-koku/pkg/tlsconfig"
+	"github.com/koku-web3/logko"
 )
 
 // Dependencies 聚合了所有在 main 启动时所需的配置

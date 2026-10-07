@@ -13,9 +13,9 @@ import (
 	"github.com/koku-web3/go-koku/internal/coordinator/types"
 	"github.com/koku-web3/go-koku/pkg/errors"
 	"github.com/koku-web3/go-koku/pkg/keyutil"
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	coordinator "github.com/koku-web3/go-koku/pkg/proto/coordinator"
 	tbproto "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
+	log "github.com/koku-web3/logko"
 )
 
 type keyService struct {

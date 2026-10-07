@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	tbgrpc "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
+	log "github.com/koku-web3/logko"
 	"google.golang.org/grpc"
 )
 

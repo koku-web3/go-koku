@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	txbuildergrpc "github.com/koku-web3/go-koku/pkg/proto/txbuilder"
+	log "github.com/koku-web3/logko"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -117,6 +117,12 @@ func (c *circuitBreakerClient) BuildSignRawData(ctx context.Context, in *txbuild
 
 func (c *circuitBreakerClient) TxBroadcast(ctx context.Context, in *txbuildergrpc.TxBroadcastRequest, opts ...grpc.CallOption) (*txbuildergrpc.TxBroadcastResponse, error) {
 	resp, err := c.client.TxBroadcast(ctx, in, opts...)
+	c.recordResult(err)
+	return resp, err
+}
+
+func (c *circuitBreakerClient) GetBalance(ctx context.Context, in *txbuildergrpc.GetBalanceRequest, opts ...grpc.CallOption) (*txbuildergrpc.GetBalanceResponse, error) {
+	resp, err := c.client.GetBalance(ctx, in, opts...)
 	c.recordResult(err)
 	return resp, err
 }

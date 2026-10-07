@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/koku-web3/go-koku/pkg/logko"
 	kvgrpc "github.com/koku-web3/go-koku/pkg/proto/key-creator"
+	log "github.com/koku-web3/logko"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

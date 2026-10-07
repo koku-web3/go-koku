@@ -5,17 +5,16 @@ services:
   mysql:
     image: mysql:8.0
     restart: unless-stopped
-    ports:
-      - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root_koku
-      MYSQL_DATABASE: koku
+      # 请确保此配置与 scripts/sql/001_init.sql 以及 config/coordinator.docker.toml 的 [db] 部分保持一致。
+      # 初始化脚本会创建/使用 `kokudb` 数据库，且 entrypoint 只为 `koku` 用户授予该 schema 的权限。
+      MYSQL_DATABASE: kokudb
       MYSQL_USER: koku
       MYSQL_PASSWORD: koku_pwd
     volumes:
-      # Initialise schema on first boot (GORM AutoMigrate also creates tables on
-      # coordinator startup, so this is a belt-and-suspenders backup).
-      - ./scripts/sql/001_init.sql:ro
+      # 首次启动时初始化数据库架构（GORM 的 AutoMigrate 也会在 coordinator 启动时创建表，所以这只是双保险备份）。
+      - ./scripts/sql/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
       - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukoku", "-pkoku_pwd"]
@@ -32,9 +31,6 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management
     restart: unless-stopped
-    ports:
-      - "5672:5672"   # AMQP
-      - "15672:15672" # Management UI (guest/guest)
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -58,14 +54,16 @@ services:
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
-    command: ["/app/signer", "-config", "/app/config/signer.docker.toml"]
-    ports:
-      - "50052:50052"
+    command: ["/app/signer", "--config", "/app/config/signer.docker.toml"]
     volumes:
       - ./config/signer.docker.toml:/app/config/signer.docker.toml:ro
       - ./certs:/etc/koku/certs:ro
     networks:
       - koku-net
+      # 附加此网络，以便该容器可以解析/访问 Vault 集群，
+      # Vault 集群运行在其独立的 compose 项目网络上（见 internal/kms-vault）。
+      # `kms-vault-1` 与 Vault 服务证书的 SAN 相匹配。
+      - vault-network
 
   # ---------------------------------------------------------------------------
   # Key-Creator — HD key generation service (gRPC :50053)
@@ -76,14 +74,14 @@ services:
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
-    command: ["/app/key-creator", "-config", "/app/config/keycreator.docker.toml"]
-    ports:
-      - "50053:50053"
+    command: ["/app/key-creator", "--config", "/app/config/keycreator.docker.toml"]
     volumes:
       - ./config/keycreator.docker.toml:/app/config/keycreator.docker.toml:ro
       - ./certs:/etc/koku/certs:ro
     networks:
       - koku-net
+      # 参考上面的 `signer` 服务：需要连接到 Vault 集群。
+      - vault-network
 
   # ---------------------------------------------------------------------------
   # Coordinator — main orchestration service (gRPC :50051)
@@ -94,7 +92,7 @@ services:
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
-    command: ["/app/coordinator", "-config", "/app/config/coordinator.docker.toml"]
+    command: ["/app/coordinator", "--config", "/app/config/coordinator.docker.toml"]
     ports:
       - "50051:50051"
     volumes:
@@ -124,4 +122,14 @@ volumes:
 # ---------------------------------------------------------------------------
 networks:
   koku-net:
+    name: koku-net
     driver: bridge
+
+  # KMS/Vault 集群是单独部署的（参见 internal/kms-vault/deploy.sh）
+  # 使用它自己的 compose 项目，这会创建一个字面名为 "vault-network" 的网络。
+  # 声明为 `external` 可以使 signer / key-creator 容器自动加入该网络，
+  # 这样它们就可以通过服务名（如 `kms-vault-1`，并且该服务名也出现在证书的 SAN 字段中）访问 Vault。
+  # 如果 Vault 还没有部署过，需先手动创建该网络：
+  #   docker network create vault-network
+  vault-network:
+    external: true
