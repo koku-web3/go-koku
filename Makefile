@@ -1,4 +1,4 @@
-.PHONY: build test fmt lint
+.PHONY: build test fmt lint tidy
 
 all: build test fmt lint
 
@@ -13,3 +13,6 @@ fmt:
 
 lint:
 	golangci-lint run ./...
+
+tidy:
+	go mod tidy
