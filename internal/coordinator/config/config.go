@@ -86,10 +86,9 @@ type DBConfig struct {
 // 单 conn 模型下只关心 gRPC 连接参数（keepalive）与熔断器，
 // 不再有连接池字段（MaxConnsPerChain / MaxTotalConns / MaxIdleTime / EvictInterval）。
 type TxBuilderConfig struct {
-	DialTimeout    int                    `toml:"dial_timeout"`
-	Keepalive      KeepaliveConfig        `toml:"keepalive"`
-	CircuitBreaker CircuitBreakerConfig   `toml:"circuit_breaker"`
-	Chains         map[string]ChainConfig `toml:"chains"`
+	DialTimeout    int                  `toml:"dial_timeout"`
+	Keepalive      KeepaliveConfig      `toml:"keepalive"`
+	CircuitBreaker CircuitBreakerConfig `toml:"circuit_breaker"`
 }
 
 // KeepaliveConfig gRPC HTTP/2 keepalive 配置
@@ -103,11 +102,6 @@ type KeepaliveConfig struct {
 type CircuitBreakerConfig struct {
 	FailureThreshold int `toml:"failure_threshold"`
 	RecoveryWindow   int `toml:"recovery_window"`
-}
-
-// ChainConfig 链配置
-type ChainConfig struct {
-	Address string `toml:"address"`
 }
 
 // MQConfig MQ 配置

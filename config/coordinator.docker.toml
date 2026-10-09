@@ -32,15 +32,6 @@ permit_without_stream = true
 failure_threshold = 5
 recovery_window = 30
 
-[txbuilder.chains.btc]
-address = "btc-txbuilder:50101"
-
-[txbuilder.chains.eth]
-address = "eth-txbuilder:50102"
-
-[txbuilder.chains.tron]
-address = "tron-txbuilder:50103"
-
 [mq]
 url = "amqp://guest:guest@rabbitmq:5672/"
 exchange = "koku.universal.transfer"
